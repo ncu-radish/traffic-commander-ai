@@ -1,0 +1,31 @@
+.map-popup {
+  color: #1a1f3a;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.map-popup h4 {
+  margin: 0 0 6px 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.map-popup p {
+  margin: 2px 0;
+}
+
+.incident-tag {
+  color: #ef4444;
+  font-weight: 600;
+  margin-top: 6px !important;
+}
+
+/* Override Leaflet defaults for dark theme */
+.leaflet-popup-content-wrapper {
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.leaflet-popup-tip {
+  box-shadow: none;
+}

@@ -1,0 +1,94 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3, 12px) var(--space-5, 20px);
+  background: rgba(10, 14, 26, 0.95);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  position: sticky;
+  top: 0;
+  z-index: var(--z-header, 40);
+  height: 64px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.header-logo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 12px);
+}
+
+.logo-icon {
+  font-size: 1.8rem;
+}
+
+.header-title {
+  font-size: var(--text-lg, 1.125rem);
+  font-weight: 700;
+  color: var(--color-text-primary, #ffffff);
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.header-subtitle {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--color-text-muted, #94a3b8);
+  margin: 0;
+  letter-spacing: 0.05em;
+}
+
+.header-center {
+  display: flex;
+  align-items: center;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4, 16px);
+}
+
+.header-alert-count {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: 4px 12px;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 999px;
+  color: #ef4444;
+  font-size: var(--text-sm, 0.875rem);
+  font-weight: 600;
+}
+
+.header-incident-count {
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-warning, #f59e0b);
+  font-weight: 500;
+}
+
+.header-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-size: var(--text-sm, 0.875rem);
+  color: var(--color-text-muted, #94a3b8);
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.pulse-dot.danger {
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
