@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ChatMessage } from '../types';
-import { sampleChatMessages } from '../data/mockAdvisoryData';
 import './ChatPanel.css';
 
 export default function ChatPanel() {
@@ -21,13 +20,14 @@ export default function ChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim()) return;
 
+    const userContent = input.trim();
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: input.trim(),
+      content: userContent,
       timestamp: new Date().toISOString(),
     };
 
@@ -35,20 +35,48 @@ export default function ChatPanel() {
     setInput('');
     setIsTyping(true);
 
-    // Mock AI response (will be replaced by real API call)
-    setTimeout(() => {
-      // Find a relevant mock response or use a default
-      const mockResponse = sampleChatMessages.find((m) => m.role === 'assistant');
+    try {
+      // Prepare history (excluding system messages if needed, but we can pass all)
+      const history = messages.map(m => ({ role: m.role, content: m.content }));
+      
+      const response = await fetch('http://localhost:8000/api/chat/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message: userContent,
+          history: history,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+
+      const data = await response.json();
+      
       const aiMsg: ChatMessage = {
         id: `ai-${Date.now()}`,
         role: 'assistant',
-        content: mockResponse?.content || '根據目前的交通資料分析，信義計畫區的交通狀況正在密切監控中。請問您想了解哪個路段或站點的詳細資訊？',
+        content: data.reply,
         timestamp: new Date().toISOString(),
-        sopReferences: mockResponse?.sopReferences,
+        sopReferences: data.sop_references,
       };
+      
       setMessages((prev) => [...prev, aiMsg]);
+    } catch (error) {
+      console.error('Chat error:', error);
+      const errorMsg: ChatMessage = {
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        content: '抱歉，系統目前無法連線到 AI 伺服器，請稍後再試。',
+        timestamp: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
       setIsTyping(false);
-    }, 1500);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {

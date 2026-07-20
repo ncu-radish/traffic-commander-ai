@@ -8,15 +8,59 @@ import ChatPanel from './components/ChatPanel';
 import AlertBannerComponent from './components/AlertBanner';
 import MetricsBar from './components/MetricsBar';
 import TimelineControl from './components/TimelineControl';
-import type { LiveIncident, AlertBanner } from './types';
-import { trafficFlowData, crowdDensityData, roadNetwork, liveIncidents, availableTimestamps } from './data/mockTrafficData';
+import type { LiveIncident, AlertBanner, TrafficSegment, CrowdDensity, RoadSegment } from './types';
 import './App.css';
 
+const API_BASE = 'http://localhost:8000/api';
 function App() {
-  const [currentTimestamp, setCurrentTimestamp] = useState(availableTimestamps[0]);
+  const [trafficFlowData, setTrafficFlowData] = useState<TrafficSegment[]>([]);
+  const [crowdDensityData, setCrowdDensityData] = useState<CrowdDensity[]>([]);
+  const [roadNetwork, setRoadNetwork] = useState<RoadSegment[]>([]);
+  const [liveIncidents, setLiveIncidents] = useState<LiveIncident[]>([]);
+  const [availableTimestamps, setAvailableTimestamps] = useState<string[]>([]);
+
+  const [currentTimestamp, setCurrentTimestamp] = useState<string>('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeIncidents, setActiveIncidents] = useState<LiveIncident[]>([]);
   const [alerts, setAlerts] = useState<AlertBanner[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch initial data
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [trafficRes, crowdRes, networkRes, incidentsRes] = await Promise.all([
+          fetch(`${API_BASE}/traffic/flow`),
+          fetch(`${API_BASE}/traffic/crowd`),
+          fetch(`${API_BASE}/traffic/network`),
+          fetch(`${API_BASE}/traffic/incidents`)
+        ]);
+
+        const trafficData = await trafficRes.json();
+        const crowdData = await crowdRes.json();
+        const networkData = await networkRes.json();
+        const incidentsData = await incidentsRes.json();
+
+        setTrafficFlowData(trafficData);
+        setCrowdDensityData(crowdData);
+        setRoadNetwork(networkData);
+        setLiveIncidents(incidentsData);
+
+        // Extract and sort unique timestamps
+        const timestamps = [...new Set(trafficData.map((d: TrafficSegment) => d.timestamp))].sort() as string[];
+        setAvailableTimestamps(timestamps);
+        if (timestamps.length > 0) {
+          setCurrentTimestamp(timestamps[0]);
+        }
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
 
   // Filter data by current timestamp
   const currentTraffic = useMemo(
@@ -31,7 +75,7 @@ function App() {
 
   // Auto-play timeline
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying || availableTimestamps.length === 0) return;
     const currentIndex = availableTimestamps.indexOf(currentTimestamp);
     if (currentIndex >= availableTimestamps.length - 1) {
       setIsPlaying(false);
@@ -124,6 +168,10 @@ function App() {
       prev.map((a) => (a.id === alertId ? { ...a, dismissed: true } : a))
     );
   }, []);
+
+  if (isLoading) {
+    return <div className="app" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>載入資料中...</div>;
+  }
 
   return (
     <div className="app">
