@@ -8,6 +8,7 @@ import ChatPanel from './components/ChatPanel';
 import AlertBannerComponent from './components/AlertBanner';
 import MetricsBar from './components/MetricsBar';
 import TimelineControl from './components/TimelineControl';
+import FortuneDraw from './components/FortuneDraw';
 import type { LiveIncident, AlertBanner, TrafficSegment, CrowdDensity, RoadSegment } from './types';
 import './App.css';
 
@@ -245,6 +246,8 @@ function App() {
           <ChatPanel />
         </aside>
       </div>
+
+      <FortuneDraw trafficData={currentTraffic} />
     </div>
   );
 }
