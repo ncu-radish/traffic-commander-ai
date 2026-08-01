@@ -23,6 +23,29 @@
   flex-shrink: 0;
 }
 
+/* 與家長端的 .user-view__back 同一套語彙，兩端的切換入口長得一樣。 */
+.header__back {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.header__back:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.header__back:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* Geometric mark instead of an emoji — emoji renders as a colour
    blob and breaks the matte palette. */
 .header__mark {

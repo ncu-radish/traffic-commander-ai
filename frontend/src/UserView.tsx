@@ -1,11 +1,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import Header from './components/Header';
 import TrafficMap from './components/TrafficMap';
 import RoutePlanner from './components/RoutePlanner';
 import IncidentPanel from './components/IncidentPanel';
+import TrafficChart from './components/TrafficChart';
+import CrowdChart from './components/CrowdChart';
 import TimelineControl from './components/TimelineControl';
 import FortuneDraw from './components/FortuneDraw';
 import AlertBannerComponent from './components/AlertBanner';
 import AdvisorySummaryModal from './components/AdvisorySummaryModal';
+import ParentStudentPanel from './components/ParentStudentPanel';
 import type { LiveIncident, TrafficSegment, RoadSegment, CrowdDensity, AccidentHotspots } from './types';
 import { saturationColor, saturationLevel } from './theme/tokens';
 import { useSopAlerts } from './hooks/useSopAlerts';
@@ -13,6 +17,7 @@ import { useAdvisoryReport } from './hooks/useAdvisoryReport';
 import { API_BASE } from './config/api';
 import { COMMUTE_ROUTES, COMMUTE_ORIGIN, COMMUTE_DESTINATION } from './data/commuteRoutes';
 import { assessCommuteRoutes } from './services/commuteRouteRisk';
+import { useStudents } from './state/studentStore';
 import './UserView.css';
 
 interface UserViewProps {
@@ -20,10 +25,10 @@ interface UserViewProps {
 }
 
 /**
- * 家長視角：地圖為主，壅塞路段 + 時間軸 + 事件注入 + 路線規劃 + 沿途路況籤詩為輔，
- * 加上與校方端共用的上下學路線模擬（畫在地圖上；路線比較面板只放校方端，
- * 家長端把面板空間留給事件注入／路線規劃）。
- * 與校方版（App.tsx）共用同一個後端，但不顯示完整的分析面板（圖表、AI對話諮詢）。
+ * 家長視角：地圖為主，壅塞路段 + 時間軸 + 事件注入 + 路線規劃 + 沿途路況籤詩，
+ * 加上與校方端共用的上下學路線模擬（畫在地圖上；路線比較面板只放校方端）、
+ * 校車學生狀態與下車通知、以及跟校方端同樣的兩張趨勢圖。
+ * 與校方版（App.tsx）共用同一個後端，但不顯示完整的分析面板（AI對話諮詢）。
  */
 export default function UserView({ onBack }: UserViewProps) {
   const [trafficFlowData, setTrafficFlowData] = useState<TrafficSegment[]>([]);
@@ -45,6 +50,13 @@ export default function UserView({ onBack }: UserViewProps) {
   // 上下學路線模擬：地圖上的路線與開關，與校方端同一套資料與評估函式。
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [showCommuteRoutes, setShowCommuteRoutes] = useState(false);
+
+  /**
+   * 學生狀態與通知，與校方端同一份 StudentContext。
+   * 老師在校方端確認下車後，這裡的狀態、下車時間、時間軸事件與
+   * 通知卡片會是同一個結果，切換角色也不會消失。
+   */
+  const { students, timelineEvents, notifications, dismissNotification } = useStudents();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -188,11 +200,15 @@ export default function UserView({ onBack }: UserViewProps) {
 
   return (
     <div className="user-view">
-      <header className="user-view__header">
-        <button className="user-view__back" onClick={onBack}>← 切換視角</button>
-        <span className="user-view__title">信義計畫區 路況地圖</span>
-        <span className="user-view__badge">家長模式</span>
-      </header>
+      {/* 與校方端同一個 Header 元件，最上方那一行樣式完全一致。
+          家長端也有事件注入，所以照樣帶警報/事件計數器。 */}
+      <Header
+        activeIncidentCount={activeIncidents.length}
+        alertCount={visibleAlerts.length}
+        currentTimestamp={currentTimestamp}
+        onBack={onBack}
+        roleLabel="家長模式"
+      />
 
       <div className="alert-stack">
         {visibleAlerts.map((alert) => (
@@ -228,6 +244,11 @@ export default function UserView({ onBack }: UserViewProps) {
         </div>
 
         <aside className="user-view__sidebar">
+          <ParentStudentPanel
+            students={students}
+            notifications={notifications}
+            onDismissNotification={dismissNotification}
+          />
           <CongestedSegmentsPanel trafficData={currentTraffic} />
           <RoutePlanner
             roadNetwork={roadNetwork}
@@ -244,6 +265,29 @@ export default function UserView({ onBack }: UserViewProps) {
             activeIncidents={activeIncidents}
             onInjectIncident={handleInjectIncident}
           />
+
+          {/* 與校方端同一組 .chart-card 外框與同兩個圖表元件，
+              尺寸、間距、顏色、hover 與 tooltip 全部沿用，這裡只是
+              改成一上一下排列。 */}
+          <div className="chart-card">
+            <div className="chart-card__header">車流飽和度趨勢</div>
+            <div className="chart-card__body">
+              <TrafficChart
+                trafficData={trafficFlowData}
+                currentTimestamp={currentTimestamp}
+              />
+            </div>
+          </div>
+
+          <div className="chart-card">
+            <div className="chart-card__header">人流密度趨勢</div>
+            <div className="chart-card__body">
+              <CrowdChart
+                crowdData={crowdDensityData}
+                currentTimestamp={currentTimestamp}
+              />
+            </div>
+          </div>
         </aside>
       </div>
 
@@ -255,6 +299,7 @@ export default function UserView({ onBack }: UserViewProps) {
           onTimestampChange={setCurrentTimestamp}
           onPlayToggle={() => setIsPlaying((p) => !p)}
           breaches={timelineBreaches}
+          events={timelineEvents}
         />
       </div>
 

@@ -148,8 +148,8 @@ export default function CommuteRoutePanel({
                   <div className="commute__stat">
                     <span className="commute__stat-label">壅塞</span>
                     <span className="commute__stat-value">
-                      {/* 路線 3 不在路網內（totalSegments 為 0），
-                          與「有路段但此刻沒讀數」要分開講。 */}
+                      {/* 「完全不含路網路段」與「有路段但此刻沒讀數」
+                          是兩件事，要分開講。 */}
                       {assessment.totalSegments === 0 ? (
                         '完全暢通'
                       ) : assessment.measuredSegments === 0 ? (
