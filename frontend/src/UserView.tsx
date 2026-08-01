@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import TrafficMap from './components/TrafficMap';
 import IncidentPanel from './components/IncidentPanel';
 import RoutePlanner from './components/RoutePlanner';
-import type { LiveIncident, TrafficSegment, RoadSegment } from './types';
+import FortuneDraw from './components/FortuneDraw';
+import type { LiveIncident, TrafficSegment, RoadSegment, CrowdDensity, AccidentHotspots } from './types';
 import './UserView.css';
 
 const API_BASE = 'http://localhost:8000/api';
@@ -12,13 +13,15 @@ interface UserViewProps {
 }
 
 /**
- * 使用者視角：簡化版 Dashboard，地圖為主，事件注入 + 路線規劃為輔。
+ * 使用者視角：地圖為主，事件注入 + 路線規劃 + 沿途路況籤詩為輔。
  * 與保險業者版（App.tsx）共用同一個後端，但不顯示完整的分析面板。
  */
 export default function UserView({ onBack }: UserViewProps) {
   const [trafficFlowData, setTrafficFlowData] = useState<TrafficSegment[]>([]);
+  const [crowdDensityData, setCrowdDensityData] = useState<CrowdDensity[]>([]);
   const [roadNetwork, setRoadNetwork] = useState<RoadSegment[]>([]);
   const [liveIncidents, setLiveIncidents] = useState<LiveIncident[]>([]);
+  const [accidentHotspots, setAccidentHotspots] = useState<AccidentHotspots | null>(null);
   const [currentTimestamp, setCurrentTimestamp] = useState('');
   const [activeIncidents, setActiveIncidents] = useState<LiveIncident[]>([]);
   const [routePath, setRoutePath] = useState<string[]>([]);
@@ -27,16 +30,19 @@ export default function UserView({ onBack }: UserViewProps) {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [trafficRes, networkRes, incidentsRes] = await Promise.all([
+        const [trafficRes, crowdRes, networkRes, incidentsRes] = await Promise.all([
           fetch(`${API_BASE}/traffic/flow`),
+          fetch(`${API_BASE}/traffic/crowd`),
           fetch(`${API_BASE}/traffic/network`),
           fetch(`${API_BASE}/traffic/incidents`),
         ]);
         const trafficData = await trafficRes.json();
+        const crowdData = await crowdRes.json();
         const networkData = await networkRes.json();
         const incidentsData = await incidentsRes.json();
 
         setTrafficFlowData(trafficData);
+        setCrowdDensityData(crowdData);
         setRoadNetwork(networkData);
         setLiveIncidents(incidentsData);
 
@@ -52,7 +58,16 @@ export default function UserView({ onBack }: UserViewProps) {
     fetchData();
   }, []);
 
+  // 事故熱點是獨立資料源，缺了不該讓整頁掛掉，所以獨立 fetch、獨立失敗處理。
+  useEffect(() => {
+    fetch(`${API_BASE}/traffic/accident-hotspots`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then(setAccidentHotspots)
+      .catch(() => setAccidentHotspots(null));
+  }, []);
+
   const currentTraffic = trafficFlowData.filter((d) => d.timestamp === currentTimestamp);
+  const currentCrowd = crowdDensityData.filter((d) => d.timestamp === currentTimestamp);
 
   const handleInjectIncident = useCallback((incident: LiveIncident) => {
     setActiveIncidents((prev) => {
@@ -80,6 +95,7 @@ export default function UserView({ onBack }: UserViewProps) {
             roadNetwork={roadNetwork}
             activeIncidents={activeIncidents}
             routePathIds={routePath}
+            accidentHotspots={accidentHotspots}
           />
         </div>
 
@@ -97,6 +113,8 @@ export default function UserView({ onBack }: UserViewProps) {
           />
         </aside>
       </div>
+
+      <FortuneDraw trafficData={currentTraffic} crowdData={currentCrowd} roadNetwork={roadNetwork} routeSegmentIds={routePath} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { RoadSegment, LiveIncident } from '../types';
 import './RoutePlanner.css';
 
@@ -30,14 +30,15 @@ export default function RoutePlanner({ roadNetwork, activeIncidents, currentTime
   const [endId, setEndId] = useState('');
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [changeAlert, setChangeAlert] = useState<{ blockedSegment: string; oldPath: string[] } | null>(null);
+  const [changeAlert, setChangeAlert] = useState<{ blockedSegment: string; alternative: RouteResult | null } | null>(null);
 
   const blockedIds = activeIncidents.map((i) => i.affectedSegment);
+  const routeRef = useRef<RouteResult | null>(null);
+  routeRef.current = route;
 
   const runPlan = useCallback(
-    async (blocked: string[]) => {
-      if (!startId || !endId) return null;
-      setLoading(true);
+    async (blocked: string[]): Promise<RouteResult> => {
+      if (!startId || !endId) return { path: [], pathNames: [], cost: null, reachable: false };
       try {
         const res = await fetch(`${API_BASE}/route/plan`, {
           method: 'POST',
@@ -49,39 +50,50 @@ export default function RoutePlanner({ roadNetwork, activeIncidents, currentTime
             timestamp: currentTimestamp || undefined,
           }),
         });
-        const data: RouteResult = await res.json();
-        return data;
+        return await res.json();
       } catch {
         return { path: [], pathNames: [], cost: null, reachable: false, reason: '無法連線後端服務' };
-      } finally {
-        setLoading(false);
       }
     },
     [startId, endId, currentTimestamp],
   );
 
   const handlePlan = async () => {
+    setLoading(true);
     const result = await runPlan(blockedIds);
+    setLoading(false);
     setRoute(result);
     setChangeAlert(null);
-    if (result?.reachable) onRouteChange?.(result.path);
+    if (result.reachable) onRouteChange?.(result.path);
   };
 
-  // 事件注入後，如果新封閉的路段剛好在目前路線上，跳出改道提示。
+  // 事件注入後，如果新封閉的路段剛好在目前路線上，先算好替代路線再跳提示，
+  // 讓使用者可以直接比較兩條路再選，而不是先跳提示、按了才知道新路線長怎樣。
   useEffect(() => {
-    if (!route || !route.reachable) return;
-    const newlyBlocked = blockedIds.find((id) => route.path.includes(id) && !(route.avoidedSegments ?? []).includes(id));
-    if (newlyBlocked) {
-      setChangeAlert({ blockedSegment: newlyBlocked, oldPath: route.path });
-    }
+    const current = routeRef.current;
+    if (!current || !current.reachable) return;
+    const newlyBlocked = blockedIds.find(
+      (id) => current.path.includes(id) && !(current.avoidedSegments ?? []).includes(id),
+    );
+    if (!newlyBlocked) return;
+
+    let cancelled = false;
+    runPlan(blockedIds).then((alternative) => {
+      if (!cancelled) setChangeAlert({ blockedSegment: newlyBlocked, alternative });
+    });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIncidents.length]);
 
-  const acceptNewRoute = async () => {
-    const result = await runPlan(blockedIds);
-    setRoute(result);
+  const keepOldRoute = () => setChangeAlert(null);
+
+  const acceptNewRoute = () => {
+    if (!changeAlert?.alternative?.reachable) return;
+    setRoute(changeAlert.alternative);
+    onRouteChange?.(changeAlert.alternative.path);
     setChangeAlert(null);
-    if (result?.reachable) onRouteChange?.(result.path);
   };
 
   const segmentName = (id: string) => roadNetwork.find((s) => s.segmentId === id)?.name ?? id;
@@ -143,11 +155,36 @@ export default function RoutePlanner({ roadNetwork, activeIncidents, currentTime
       {changeAlert && (
         <div className="route-planner__change-alert">
           <p>
-            <strong>{segmentName(changeAlert.blockedSegment)}</strong> 剛發生事故，位於您目前的路線上。
+            <strong>{segmentName(changeAlert.blockedSegment)}</strong> 剛發生事故，位於您目前的路線上，請選擇：
           </p>
-          <button className="route-planner__btn route-planner__btn--accent" onClick={acceptNewRoute}>
-            採用新路線（避開此路段）
-          </button>
+
+          <div className="route-planner__choice">
+            <div className="route-planner__choice-option">
+              <div className="route-planner__choice-label">維持原路線</div>
+              <div className="route-planner__choice-path">
+                {route?.pathNames.join(' → ')}（會經過事故路段）
+              </div>
+              <button className="route-planner__btn" onClick={keepOldRoute}>維持原路線</button>
+            </div>
+
+            <div className="route-planner__choice-option">
+              <div className="route-planner__choice-label">改道</div>
+              {changeAlert.alternative?.reachable ? (
+                <>
+                  <div className="route-planner__choice-path">
+                    {changeAlert.alternative.pathNames.join(' → ')}
+                  </div>
+                  <button className="route-planner__btn route-planner__btn--accent" onClick={acceptNewRoute}>
+                    採用新路線（避開此路段）
+                  </button>
+                </>
+              ) : (
+                <div className="route-planner__choice-path">
+                  {changeAlert.alternative?.reason ?? '避開後無可行路徑'}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

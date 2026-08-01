@@ -8,6 +8,8 @@ interface FortuneDrawProps {
   trafficData: TrafficSegment[];
   crowdData: CrowdDensity[];
   roadNetwork: RoadSegment[];
+  /** 若提供（例如使用者已規劃路線），籤詩只看這幾個路段，不看全城最壅塞的那條。 */
+  routeSegmentIds?: string[];
 }
 
 interface WeatherSnapshot {
@@ -186,6 +188,8 @@ interface FortuneResult {
   classification: ClassifyResult;
   headline: TrafficSegment;
   congestedRoads: TrafficSegment[];
+  citywideCongestedCount: number;
+  isRouteScoped: boolean;
   crowdedSpots: CrowdDensity[];
   alternatives: string[];
   smoothnessIndex: number;
@@ -218,7 +222,7 @@ async function fetchWeather(): Promise<WeatherState> {
   }
 }
 
-export default function FortuneDraw({ trafficData, crowdData, roadNetwork }: FortuneDrawProps) {
+export default function FortuneDraw({ trafficData, crowdData, roadNetwork, routeSegmentIds = [] }: FortuneDrawProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [stage, setStage] = useState<Stage>('drawing');
   const [result, setResult] = useState<FortuneResult | null>(null);
@@ -239,8 +243,12 @@ export default function FortuneDraw({ trafficData, crowdData, roadNetwork }: For
     };
   }, [isOpen]);
 
+  const scopedTraffic = routeSegmentIds.length > 0
+    ? trafficData.filter((s) => routeSegmentIds.includes(s.segmentId))
+    : trafficData;
+
   const draw = async () => {
-    if (trafficData.length === 0) return;
+    if (scopedTraffic.length === 0) return;
 
     setStage('drawing');
     setIsOpen(true);
@@ -250,7 +258,7 @@ export default function FortuneDraw({ trafficData, crowdData, roadNetwork }: For
     const [weatherState] = await Promise.all([fetchWeather(), minDelay]);
     setWeather(weatherState);
 
-    const roadsByCongestion = [...trafficData].sort((a, b) => b.saturationScore - a.saturationScore);
+    const roadsByCongestion = [...scopedTraffic].sort((a, b) => b.saturationScore - a.saturationScore);
     const headline = roadsByCongestion[0];
     const congestedRoads = roadsByCongestion.slice(0, ROAD_LIST_SIZE);
     const crowdedSpots = [...crowdData].sort((a, b) => b.userCount - a.userCount).slice(0, CROWD_LIST_SIZE);
@@ -271,7 +279,11 @@ export default function FortuneDraw({ trafficData, crowdData, roadNetwork }: For
 
     const smoothnessIndex = Math.max(0, Math.min(100, Math.round((1 - headline.saturationScore) * 100)));
 
-    setResult({ verse, classification, headline, congestedRoads, crowdedSpots, alternatives, smoothnessIndex });
+    setResult({
+      verse, classification, headline, congestedRoads, crowdedSpots, alternatives, smoothnessIndex,
+      citywideCongestedCount: heavilyCongestedCount,
+      isRouteScoped: routeSegmentIds.length > 0,
+    });
     setStage('revealed');
   };
 
@@ -281,7 +293,7 @@ export default function FortuneDraw({ trafficData, crowdData, roadNetwork }: For
     <>
       <button className="fortune-trigger" onClick={draw} title="求一支路況籤">
         <span className="fortune-trigger-icon">🔮</span>
-        求籤問路況
+        {routeSegmentIds.length > 0 ? '求籤問沿途路況' : '求籤問路況'}
       </button>
 
       {isOpen && (
@@ -356,8 +368,12 @@ export default function FortuneDraw({ trafficData, crowdData, roadNetwork }: For
                       <dd>{result.headline.avgSpeed.toFixed(0)} km/h</dd>
                     </div>
                     <div className="fortune-fact">
-                      <dt>全城壅塞路段數</dt>
-                      <dd>{result.congestedRoads.filter((s) => s.saturationScore >= 0.85).length} / 15</dd>
+                      <dt>{result.isRouteScoped ? '沿途壅塞路段數' : '全城壅塞路段數'}</dt>
+                      <dd>
+                        {result.isRouteScoped
+                          ? `${result.congestedRoads.filter((s) => s.saturationScore >= 0.85).length} / ${result.congestedRoads.length}`
+                          : `${result.citywideCongestedCount} / 15`}
+                      </dd>
                     </div>
                     <div className="fortune-fact fortune-fact--wide">
                       <dt>可考慮改道路段</dt>
