@@ -9,9 +9,9 @@ interface AdvisorySummaryModalProps {
 }
 
 /**
- * 事件注入後自動跳出的預警摘要——沿用 RoutePlanner 已經有的
- * route-check-overlay/route-check-modal 視覺框架（同一支 CSS，z-index同量級），
- * 不用另外重新解決一次「彈窗被地圖蓋掉」的問題。
+ * 事件注入後自動跳出的預警摘要——用共通的 route-check-overlay/route-check-modal
+ * 視覺框架（AdvisorySummaryModal.css，z-index同量級），不用另外重新解決一次
+ * 「彈窗被地圖蓋掉」的問題。
  */
 export default function AdvisorySummaryModal({ open, loading, report, onClose }: AdvisorySummaryModalProps) {
   if (!open) return null;

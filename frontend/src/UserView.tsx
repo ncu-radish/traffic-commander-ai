@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Header from './components/Header';
 import TrafficMap from './components/TrafficMap';
-import RoutePlanner from './components/RoutePlanner';
 import IncidentPanel from './components/IncidentPanel';
 import TrafficChart from './components/TrafficChart';
 import CrowdChart from './components/CrowdChart';
@@ -40,11 +39,7 @@ export default function UserView({ onBack }: UserViewProps) {
   const [availableTimestamps, setAvailableTimestamps] = useState<string[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeIncidents, setActiveIncidents] = useState<LiveIncident[]>([]);
-  const [routePath, setRoutePath] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [pickingActive, setPickingActive] = useState(false);
-  const [pickedStart, setPickedStart] = useState<{ segmentId: string; name: string } | null>(null);
-  const [userPositionPoint, setUserPositionPoint] = useState<[number, number] | null>(null);
   // 點選路段後的高亮，跟校方端同一套互動。
   const [focusedSegmentId, setFocusedSegmentId] = useState<string | null>(null);
   // 上下學路線模擬：地圖上的路線與開關，與校方端同一套資料與評估函式。
@@ -159,25 +154,6 @@ export default function UserView({ onBack }: UserViewProps) {
     [currentTraffic, accidentHotspots],
   );
 
-  // 路線規劃好之後，地圖聚焦在「路線本身」+「跟路線路口交叉的路段」——
-  // 跟 RoutePlanner 判斷事件是否影響路線用的是同一套「路口交叉」邏輯，維持一致。
-  const focusSegmentIds = (() => {
-    if (routePath.length === 0) return undefined;
-    const byId = new Map(roadNetwork.map((s) => [s.segmentId, s]));
-    const focus = new Set(routePath);
-    for (const segId of routePath) {
-      const seg = byId.get(segId);
-      if (!seg) continue;
-      for (const other of roadNetwork) {
-        if (focus.has(other.segmentId)) continue;
-        if (seg.intersections.includes(other.name) || other.intersections.includes(seg.name)) {
-          focus.add(other.segmentId);
-        }
-      }
-    }
-    return Array.from(focus);
-  })();
-
   const handleInjectIncident = useCallback((incident: LiveIncident) => {
     setActiveIncidents((prev) => {
       if (prev.find((i) => i.eventId === incident.eventId)) return prev;
@@ -187,12 +163,6 @@ export default function UserView({ onBack }: UserViewProps) {
     // 事件對應到SOP第2/5條的話會拿到正式條文內容，其餘由 hook 自己補一則通用警報。
     requestAdvisory(incident.eventId, incident.timestamp);
   }, [requestAdvisory]);
-
-  const handleMapClick = useCallback((segmentId: string, name: string, lat: number, lng: number) => {
-    setPickedStart({ segmentId, name });
-    setUserPositionPoint([lat, lng]);
-    setPickingActive(false);
-  }, []);
 
   if (isLoading) {
     return <div className="user-view user-view--loading">載入資料中…</div>;
@@ -226,11 +196,7 @@ export default function UserView({ onBack }: UserViewProps) {
             trafficData={currentTraffic}
             roadNetwork={roadNetwork}
             activeIncidents={activeIncidents}
-            routePathIds={routePath}
             accidentHotspots={accidentHotspots}
-            focusSegmentIds={focusSegmentIds}
-            onMapClick={pickingActive ? handleMapClick : undefined}
-            userPositionPoint={userPositionPoint}
             selectedSegmentId={focusedSegmentId}
             onSelectSegment={setFocusedSegmentId}
             commuteRoutes={commuteAssessments}
@@ -250,16 +216,6 @@ export default function UserView({ onBack }: UserViewProps) {
             onDismissNotification={dismissNotification}
           />
           <CongestedSegmentsPanel trafficData={currentTraffic} />
-          <RoutePlanner
-            roadNetwork={roadNetwork}
-            activeIncidents={activeIncidents}
-            currentTimestamp={currentTimestamp}
-            crowdData={currentCrowd}
-            onRouteChange={setRoutePath}
-            pickedStart={pickedStart}
-            pickingActive={pickingActive}
-            onRequestPick={() => setPickingActive(true)}
-          />
           <IncidentPanel
             incidents={liveIncidents}
             activeIncidents={activeIncidents}
@@ -303,7 +259,7 @@ export default function UserView({ onBack }: UserViewProps) {
         />
       </div>
 
-      <FortuneDraw trafficData={currentTraffic} crowdData={currentCrowd} roadNetwork={roadNetwork} routeSegmentIds={routePath} />
+      <FortuneDraw trafficData={currentTraffic} crowdData={currentCrowd} roadNetwork={roadNetwork} />
 
       <AdvisorySummaryModal
         open={advisoryModalOpen}

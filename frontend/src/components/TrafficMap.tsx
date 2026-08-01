@@ -51,7 +51,7 @@ interface TrafficMapProps {
   secondaryRouteIds?: string[];
   /** data.taipei 114年事故斑點圖，依路段比對後的統計。缺資料時該圖層直接不畫。 */
   accidentHotspots?: AccidentHotspots | null;
-  /** 使用者導航模擬（RoutePlanner）算出的多跳路徑，與 primary/secondary（SOP2單跳）分開畫。 */
+  /** 多跳路徑（若未來需要），與 primary/secondary（SOP2單跳）分開畫。目前沒有呼叫端在用。 */
   routePathIds?: string[];
   /**
    * 有值時只保留這些路段（含事故熱點）的完整顯示，其餘路段淡出——

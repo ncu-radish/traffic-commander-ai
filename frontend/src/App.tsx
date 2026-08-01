@@ -10,7 +10,6 @@ import MetricsBar from './components/MetricsBar';
 import TimelineControl from './components/TimelineControl';
 import CommuteRoutePanel from './components/CommuteRoutePanel';
 import FortuneDraw from './components/FortuneDraw';
-import RoutePlanner from './components/RoutePlanner';
 import AdvisorySummaryModal from './components/AdvisorySummaryModal';
 import StudentRoster from './components/StudentRoster';
 import DropOffConfirmModal from './components/DropOffConfirmModal';
@@ -49,11 +48,6 @@ function App({ onBack }: AppProps) {
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   // 路線預設不顯示，按下地圖上的按鈕（或面板入口）才畫出來。
   const [showCommuteRoutes, setShowCommuteRoutes] = useState(false);
-
-  const [routePath, setRoutePath] = useState<string[]>([]);
-  const [pickingActive, setPickingActive] = useState(false);
-  const [pickedStart, setPickedStart] = useState<{ segmentId: string; name: string } | null>(null);
-  const [userPositionPoint, setUserPositionPoint] = useState<[number, number] | null>(null);
 
   /**
    * 校車學生名單。狀態放在 StudentContext（掛在 Root），
@@ -193,12 +187,6 @@ function App({ onBack }: AppProps) {
     setAdvisoryOpen(true);
   }, []);
 
-  const handleMapClick = useCallback((segmentId: string, name: string, lat: number, lng: number) => {
-    setPickedStart({ segmentId, name });
-    setUserPositionPoint([lat, lng]);
-    setPickingActive(false);
-  }, []);
-
   /**
    * 老師確認下車。下車時間取時間軸當前位置，所以記錄下來的時間
    * 與畫面上的時間軸讀數一致，事件也會落在對應的時間刻度上。
@@ -271,18 +259,6 @@ function App({ onBack }: AppProps) {
             </div>
             <MetricsBar trafficData={currentTraffic} crowdData={currentCrowd} />
 
-            <div className="rail-label">路線規劃</div>
-            <RoutePlanner
-              roadNetwork={roadNetwork}
-              activeIncidents={activeIncidents}
-              currentTimestamp={currentTimestamp}
-              crowdData={currentCrowd}
-              onRouteChange={setRoutePath}
-              pickedStart={pickedStart}
-              pickingActive={pickingActive}
-              onRequestPick={() => setPickingActive(true)}
-            />
-
             <div className="rail-label">
               事件注入
               <span className="rail-label__count">
@@ -311,9 +287,6 @@ function App({ onBack }: AppProps) {
               activeIncidents={activeIncidents}
               selectedSegmentId={focusedSegmentId}
               onSelectSegment={handleSelectSegment}
-              routePathIds={routePath}
-              onMapClick={pickingActive ? handleMapClick : undefined}
-              userPositionPoint={userPositionPoint}
               commuteRoutes={commuteAssessments}
               commuteOrigin={COMMUTE_ORIGIN}
               commuteDestination={COMMUTE_DESTINATION}
