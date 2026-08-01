@@ -96,17 +96,70 @@
   font-variant-numeric: tabular-nums;
 }
 
-.route-planner__change-alert {
-  margin-top: var(--space-4);
-  padding: var(--space-3);
-  border-radius: var(--radius-sm);
-  background: var(--level-a-soft);
-  border: 1px solid var(--level-a-line);
+/* ── 真正的彈出視窗，蓋在整個畫面上，不是側邊欄裡的小卡片 ── */
+.route-check-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 7, 15, 0.72);
+  backdrop-filter: blur(6px);
+  padding: var(--space-6);
+  animation: route-check-fade 200ms ease;
 }
-.route-planner__change-alert p {
-  margin: 0 0 var(--space-3);
-  font-size: var(--text-sm);
+@keyframes route-check-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.route-check-modal {
+  width: min(440px, 100%);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+  animation: route-check-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes route-check-pop {
+  from { opacity: 0; transform: scale(0.92) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.route-check-modal h3 {
+  margin: var(--space-3) 0 var(--space-2);
+  font-size: var(--text-lg);
   color: var(--text-primary);
+}
+
+.route-check-modal > p {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading);
+}
+
+.route-check-modal__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto;
+  border-radius: 50%;
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+.route-check-modal__icon--ok {
+  background: var(--level-ok-soft);
+  color: var(--level-ok);
+}
+.route-check-modal__icon--warn {
+  background: var(--level-a-soft);
+  color: var(--level-a);
 }
 
 .route-planner__choice {

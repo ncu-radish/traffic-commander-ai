@@ -8,9 +8,11 @@
   align-items: center;
   gap: var(--space-2);
   position: fixed;
-  right: var(--space-6);
+  right: var(--fortune-trigger-right, var(--space-6));
   bottom: var(--space-6);
-  z-index: var(--z-overlay);
+  /* 蓋過Leaflet地圖自己的內部圖層堆疊（tile/overlay/marker/popup pane最高到約700），
+     不能只靠 --z-overlay(10) 這種給一般面板用的小數字。 */
+  z-index: 2000;
   padding: var(--space-3) var(--space-5);
   border-radius: var(--radius-pill);
   border: 1px solid var(--line);
@@ -44,7 +46,7 @@
 .fortune-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal);
+  z-index: 2001;
   display: flex;
   align-items: flex-start;
   justify-content: center;

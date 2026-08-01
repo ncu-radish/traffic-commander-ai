@@ -13,6 +13,10 @@ interface RouteResult {
   avoidedSegments?: string[];
 }
 
+type RouteCheckModal =
+  | { status: 'affected'; blockedSegment: string; alternative: RouteResult }
+  | { status: 'clear'; checkedSegment: string };
+
 interface RoutePlannerProps {
   roadNetwork: RoadSegment[];
   activeIncidents: LiveIncident[];
@@ -30,11 +34,11 @@ export default function RoutePlanner({ roadNetwork, activeIncidents, currentTime
   const [endId, setEndId] = useState('');
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [changeAlert, setChangeAlert] = useState<{ blockedSegment: string; alternative: RouteResult | null } | null>(null);
+  const [checkModal, setCheckModal] = useState<RouteCheckModal | null>(null);
 
-  const blockedIds = activeIncidents.map((i) => i.affectedSegment);
   const routeRef = useRef<RouteResult | null>(null);
   routeRef.current = route;
+  const checkedIncidentIdsRef = useRef<Set<string>>(new Set());
 
   const runPlan = useCallback(
     async (blocked: string[]): Promise<RouteResult> => {
@@ -60,26 +64,38 @@ export default function RoutePlanner({ roadNetwork, activeIncidents, currentTime
 
   const handlePlan = async () => {
     setLoading(true);
+    const blockedIds = activeIncidents.map((i) => i.affectedSegment);
     const result = await runPlan(blockedIds);
     setLoading(false);
     setRoute(result);
-    setChangeAlert(null);
+    setCheckModal(null);
+    checkedIncidentIdsRef.current = new Set(activeIncidents.map((i) => i.eventId));
     if (result.reachable) onRouteChange?.(result.path);
   };
 
-  // 事件注入後，如果新封閉的路段剛好在目前路線上，先算好替代路線再跳提示，
-  // 讓使用者可以直接比較兩條路再選，而不是先跳提示、按了才知道新路線長怎樣。
+  // 每次有「新的」事件被注入（不是重複觸發），只要目前有規劃中的路線，
+  // 就跳出視窗告知檢查結果——不管有沒有影響都跳，讓使用者清楚知道系統真的檢查過了。
   useEffect(() => {
     const current = routeRef.current;
     if (!current || !current.reachable) return;
-    const newlyBlocked = blockedIds.find(
-      (id) => current.path.includes(id) && !(current.avoidedSegments ?? []).includes(id),
-    );
-    if (!newlyBlocked) return;
+
+    const newIncidents = activeIncidents.filter((i) => !checkedIncidentIdsRef.current.has(i.eventId));
+    if (newIncidents.length === 0) return;
+    checkedIncidentIdsRef.current = new Set(activeIncidents.map((i) => i.eventId));
+
+    const blockedIds = activeIncidents.map((i) => i.affectedSegment);
+    const affectedIncident = newIncidents.find((i) => current.path.includes(i.affectedSegment));
+
+    if (!affectedIncident) {
+      setCheckModal({ status: 'clear', checkedSegment: newIncidents.map((i) => i.affectedSegment).join('、') });
+      return;
+    }
 
     let cancelled = false;
     runPlan(blockedIds).then((alternative) => {
-      if (!cancelled) setChangeAlert({ blockedSegment: newlyBlocked, alternative });
+      if (!cancelled) {
+        setCheckModal({ status: 'affected', blockedSegment: affectedIncident.affectedSegment, alternative });
+      }
     });
     return () => {
       cancelled = true;
@@ -87,13 +103,15 @@ export default function RoutePlanner({ roadNetwork, activeIncidents, currentTime
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeIncidents.length]);
 
-  const keepOldRoute = () => setChangeAlert(null);
+  const closeModal = () => setCheckModal(null);
+
+  const keepOldRoute = () => setCheckModal(null);
 
   const acceptNewRoute = () => {
-    if (!changeAlert?.alternative?.reachable) return;
-    setRoute(changeAlert.alternative);
-    onRouteChange?.(changeAlert.alternative.path);
-    setChangeAlert(null);
+    if (checkModal?.status !== 'affected' || !checkModal.alternative.reachable) return;
+    setRoute(checkModal.alternative);
+    onRouteChange?.(checkModal.alternative.path);
+    setCheckModal(null);
   };
 
   const segmentName = (id: string) => roadNetwork.find((s) => s.segmentId === id)?.name ?? id;
@@ -152,38 +170,55 @@ export default function RoutePlanner({ roadNetwork, activeIncidents, currentTime
         </div>
       )}
 
-      {changeAlert && (
-        <div className="route-planner__change-alert">
-          <p>
-            <strong>{segmentName(changeAlert.blockedSegment)}</strong> 剛發生事故，位於您目前的路線上，請選擇：
-          </p>
+      {checkModal && (
+        <div className="route-check-overlay" onClick={closeModal}>
+          <div className="route-check-modal" onClick={(e) => e.stopPropagation()}>
+            {checkModal.status === 'clear' ? (
+              <>
+                <div className="route-check-modal__icon route-check-modal__icon--ok">✓</div>
+                <h3>新事件不影響您的路線</h3>
+                <p>
+                  <strong>{segmentName(checkModal.checkedSegment)}</strong> 剛發生事件，但不在您目前規劃的路線上，可依原計畫通行。
+                </p>
+                <button className="route-planner__btn" onClick={closeModal}>知道了</button>
+              </>
+            ) : (
+              <>
+                <div className="route-check-modal__icon route-check-modal__icon--warn">⚠</div>
+                <h3>新事件影響您的路線</h3>
+                <p>
+                  <strong>{segmentName(checkModal.blockedSegment)}</strong> 剛發生事故，位於您目前的路線上，請選擇：
+                </p>
 
-          <div className="route-planner__choice">
-            <div className="route-planner__choice-option">
-              <div className="route-planner__choice-label">維持原路線</div>
-              <div className="route-planner__choice-path">
-                {route?.pathNames.join(' → ')}（會經過事故路段）
-              </div>
-              <button className="route-planner__btn" onClick={keepOldRoute}>維持原路線</button>
-            </div>
-
-            <div className="route-planner__choice-option">
-              <div className="route-planner__choice-label">改道</div>
-              {changeAlert.alternative?.reachable ? (
-                <>
-                  <div className="route-planner__choice-path">
-                    {changeAlert.alternative.pathNames.join(' → ')}
+                <div className="route-planner__choice">
+                  <div className="route-planner__choice-option">
+                    <div className="route-planner__choice-label">維持原路線</div>
+                    <div className="route-planner__choice-path">
+                      {route?.pathNames.join(' → ')}（會經過事故路段）
+                    </div>
+                    <button className="route-planner__btn" onClick={keepOldRoute}>維持原路線</button>
                   </div>
-                  <button className="route-planner__btn route-planner__btn--accent" onClick={acceptNewRoute}>
-                    採用新路線（避開此路段）
-                  </button>
-                </>
-              ) : (
-                <div className="route-planner__choice-path">
-                  {changeAlert.alternative?.reason ?? '避開後無可行路徑'}
+
+                  <div className="route-planner__choice-option">
+                    <div className="route-planner__choice-label">改道</div>
+                    {checkModal.alternative.reachable ? (
+                      <>
+                        <div className="route-planner__choice-path">
+                          {checkModal.alternative.pathNames.join(' → ')}
+                        </div>
+                        <button className="route-planner__btn route-planner__btn--accent" onClick={acceptNewRoute}>
+                          採用新路線（避開此路段）
+                        </button>
+                      </>
+                    ) : (
+                      <div className="route-planner__choice-path">
+                        {checkModal.alternative.reason ?? '避開後無可行路徑'}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-            </div>
+              </>
+            )}
           </div>
         </div>
       )}

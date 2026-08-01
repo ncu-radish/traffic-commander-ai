@@ -6,6 +6,8 @@
   background: var(--surface-base);
   color: var(--text-primary);
   font-family: var(--font-family);
+  /* 側邊欄佔340px+間距，抽籤按鈕固定在視窗右下角時要避開，不然會疊在事件卡片上。 */
+  --fortune-trigger-right: calc(340px + var(--space-3) + var(--space-6));
 }
 
 .user-view--loading {
