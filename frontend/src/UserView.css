@@ -17,6 +17,25 @@
   color: var(--text-muted);
 }
 
+/* 事件注入/SOP門檻警報——跟保險業者版共用同一套視覺，但獨立複製一份 CSS
+   （不依賴 App.css），並且 z-index 要跟籤詩按鈕/彈出視窗同一量級，
+   不然一樣會被 Leaflet 地圖內部圖層蓋掉。 */
+.alert-stack {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1999;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(680px, 90vw);
+  pointer-events: none;
+}
+.alert-stack > * {
+  pointer-events: auto;
+}
+
 .user-view__header {
   display: flex;
   align-items: center;
