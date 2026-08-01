@@ -4,7 +4,9 @@ import IncidentPanel from './components/IncidentPanel';
 import RoutePlanner from './components/RoutePlanner';
 import FortuneDraw from './components/FortuneDraw';
 import AlertBannerComponent from './components/AlertBanner';
+import TimelineControl from './components/TimelineControl';
 import type { LiveIncident, TrafficSegment, RoadSegment, CrowdDensity, AccidentHotspots, AlertBanner } from './types';
+import { saturationColor, saturationLevel } from './theme/tokens';
 import './UserView.css';
 
 const API_BASE = 'http://localhost:8000/api';
@@ -14,8 +16,8 @@ interface UserViewProps {
 }
 
 /**
- * 使用者視角：地圖為主，事件注入 + 路線規劃 + 沿途路況籤詩為輔。
- * 與保險業者版（App.tsx）共用同一個後端，但不顯示完整的分析面板。
+ * 家長視角：地圖為主，壅塞路段 + 時間軸 + 事件注入 + 路線規劃 + 沿途路況籤詩為輔。
+ * 與校方版（App.tsx）共用同一個後端，但不顯示完整的分析面板（圖表、AI對話諮詢）。
  */
 export default function UserView({ onBack }: UserViewProps) {
   const [trafficFlowData, setTrafficFlowData] = useState<TrafficSegment[]>([]);
@@ -24,6 +26,8 @@ export default function UserView({ onBack }: UserViewProps) {
   const [liveIncidents, setLiveIncidents] = useState<LiveIncident[]>([]);
   const [accidentHotspots, setAccidentHotspots] = useState<AccidentHotspots | null>(null);
   const [currentTimestamp, setCurrentTimestamp] = useState('');
+  const [availableTimestamps, setAvailableTimestamps] = useState<string[]>([]);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [activeIncidents, setActiveIncidents] = useState<LiveIncident[]>([]);
   const [routePath, setRoutePath] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,7 +55,8 @@ export default function UserView({ onBack }: UserViewProps) {
         setLiveIncidents(incidentsData);
 
         const timestamps = [...new Set(trafficData.map((d: TrafficSegment) => d.timestamp))].sort() as string[];
-        // 使用者版不提供時間軸拖拉，固定顯示最新一筆，維持「簡單」的訴求。
+        setAvailableTimestamps(timestamps);
+        // 預設停在最新一筆，但家長可以自己拖時間軸回顧之前的路況。
         if (timestamps.length > 0) setCurrentTimestamp(timestamps[timestamps.length - 1]);
       } catch (error) {
         console.error('UserView fetch error:', error);
@@ -79,8 +84,37 @@ export default function UserView({ onBack }: UserViewProps) {
     [crowdDensityData, currentTimestamp],
   );
 
-  // SOP門檻警示——跟保險業者版（App.tsx）用同一套判定，只是使用者版固定看最新一筆資料，
-  // 不會隨時間軸捲動而重新觸發。之前只有 App.tsx 有這個橫幅，使用者版沒有。
+  // 播放中的時間軸自動往下一格走，跟校方版（App.tsx）同一套邏輯。
+  useEffect(() => {
+    if (!isPlaying || availableTimestamps.length === 0) return;
+    const currentIndex = availableTimestamps.indexOf(currentTimestamp);
+    if (currentIndex >= availableTimestamps.length - 1) {
+      setIsPlaying(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setCurrentTimestamp(availableTimestamps[currentIndex + 1]);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [isPlaying, currentTimestamp, availableTimestamps]);
+
+  // 時間軸上每個時間點最高觸發到哪個SOP第1條等級，畫成彩色刻度，
+  // 讓家長不用整段拖過去，一眼看出哪個時段路況比較差。
+  const timelineBreaches = useMemo(() => {
+    const map: Record<string, 'A' | 'B'> = {};
+    for (const row of trafficFlowData) {
+      if (row.segmentId !== 'RD_TPE_001' && row.segmentId !== 'RD_TPE_002') continue;
+      if (row.saturationScore >= 0.95) {
+        map[row.timestamp] = 'A';
+      } else if (row.saturationScore >= 0.85 && map[row.timestamp] !== 'A') {
+        map[row.timestamp] = 'B';
+      }
+    }
+    return map;
+  }, [trafficFlowData]);
+
+  // SOP門檻警示——跟校方版（App.tsx）用同一套判定，會隨時間軸捲動重新觸發。
+  // 之前只有 App.tsx 有這個橫幅，家長版沒有。
   const [alerts, setAlerts] = useState<AlertBanner[]>([]);
 
   useEffect(() => {
@@ -203,7 +237,7 @@ export default function UserView({ onBack }: UserViewProps) {
       <header className="user-view__header">
         <button className="user-view__back" onClick={onBack}>← 切換視角</button>
         <span className="user-view__title">信義計畫區 路況地圖</span>
-        <span className="user-view__badge">使用者模式</span>
+        <span className="user-view__badge">家長模式</span>
       </header>
 
       <div className="alert-stack">
@@ -231,6 +265,7 @@ export default function UserView({ onBack }: UserViewProps) {
         </div>
 
         <aside className="user-view__sidebar">
+          <CongestedSegmentsPanel trafficData={currentTraffic} />
           <RoutePlanner
             roadNetwork={roadNetwork}
             activeIncidents={activeIncidents}
@@ -249,7 +284,49 @@ export default function UserView({ onBack }: UserViewProps) {
         </aside>
       </div>
 
+      <div className="user-view__timeline">
+        <TimelineControl
+          timestamps={availableTimestamps}
+          currentTimestamp={currentTimestamp}
+          isPlaying={isPlaying}
+          onTimestampChange={setCurrentTimestamp}
+          onPlayToggle={() => setIsPlaying((p) => !p)}
+          breaches={timelineBreaches}
+        />
+      </div>
+
       <FortuneDraw trafficData={currentTraffic} crowdData={currentCrowd} roadNetwork={roadNetwork} routeSegmentIds={routePath} />
+    </div>
+  );
+}
+
+/** 壅塞路段列表——依飽和度排序，家長一眼看出哪幾條路現在塞，不用逐條點地圖確認。 */
+function CongestedSegmentsPanel({ trafficData }: { trafficData: TrafficSegment[] }) {
+  const sorted = [...trafficData].sort((a, b) => b.saturationScore - a.saturationScore);
+
+  return (
+    <div className="glass-panel congestion-panel">
+      <div className="glass-panel-header">
+        <span className="status-dot" />
+        壅塞路段
+      </div>
+      {sorted.length === 0 ? (
+        <p className="congestion-panel__empty">此時間點無路況資料</p>
+      ) : (
+        <ul className="congestion-panel__list">
+          {sorted.map((seg) => (
+            <li key={seg.segmentId} className="congestion-panel__item">
+              <span className="congestion-panel__name">{seg.roadName}</span>
+              <span
+                className={`congestion-panel__badge congestion-panel__badge--${saturationLevel(seg.saturationScore)}`}
+                style={{ color: saturationColor(seg.saturationScore) }}
+              >
+                {(seg.saturationScore * 100).toFixed(0)}%
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
