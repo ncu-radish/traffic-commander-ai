@@ -1,0 +1,107 @@
+.timeline-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4, 16px);
+  padding: var(--space-3, 12px) var(--space-4, 16px) !important;
+}
+
+.timeline-play-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 212, 255, 0.4);
+  background: rgba(0, 212, 255, 0.1);
+  color: #00d4ff;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all var(--transition-fast, 150ms);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.timeline-play-btn:hover {
+  background: rgba(0, 212, 255, 0.2);
+  border-color: #00d4ff;
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+}
+
+.timeline-play-btn.playing {
+  background: rgba(0, 212, 255, 0.2);
+  border-color: #00d4ff;
+  animation: glow 2s ease-in-out infinite;
+}
+
+.timeline-track-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.timeline-track {
+  position: relative;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: visible;
+}
+
+.timeline-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #00d4ff, #0091ff);
+  border-radius: 3px;
+  transition: width var(--transition-fast, 150ms);
+}
+
+.timeline-slider {
+  position: absolute;
+  top: -6px;
+  left: 0;
+  width: 100%;
+  height: 18px;
+  opacity: 0;
+  cursor: pointer;
+  margin: 0;
+}
+
+.timeline-labels {
+  display: flex;
+  justify-content: space-between;
+}
+
+.timeline-label {
+  font-size: 0.65rem;
+  color: var(--color-text-muted, #64748b);
+  cursor: pointer;
+  transition: color var(--transition-fast, 150ms);
+  user-select: none;
+}
+
+.timeline-label:hover,
+.timeline-label.active {
+  color: #00d4ff;
+}
+
+.timeline-current {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.timeline-current-time {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #00d4ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-current-date {
+  font-size: 0.7rem;
+  color: var(--color-text-muted, #94a3b8);
+}
