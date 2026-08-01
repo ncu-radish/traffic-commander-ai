@@ -1,106 +1,177 @@
-.chat-panel {
-  flex: 1;
+/* ═══════════════════════════════════════════════════════════════
+   Chat — advisory column, full height, composer pinned bottom
+   Flat surfaces, no gradient bubbles. Reads like an internal ops
+   tool rather than a consumer messenger.
+   ═══════════════════════════════════════════════════════════════ */
+
+.chat {
+  height: 100%;
   display: flex;
   flex-direction: column;
-  min-height: 300px;
-  max-height: 500px;
+  min-height: 0;
+  background: var(--surface-base);
 }
 
-.chat-messages {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3, 12px);
-  padding: var(--space-2, 8px) 0;
-  padding-right: 4px;
-}
-
-.chat-bubble {
-  max-width: 90%;
-  padding: var(--space-3, 12px) var(--space-4, 16px);
-  border-radius: 16px;
-  font-size: 0.85rem;
-  line-height: 1.5;
-  animation: fadeIn 0.2s ease;
-}
-
-.chat-bubble-user {
-  background: linear-gradient(135deg, #0091ff, #00d4ff);
-  color: white;
-  border-bottom-right-radius: 4px;
-  align-self: flex-end;
-}
-
-.chat-bubble-ai {
-  background: rgba(30, 40, 70, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--color-text-primary, #e2e8f0);
-  border-bottom-left-radius: 4px;
-  align-self: flex-start;
-}
-
-.chat-role {
-  display: block;
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: var(--color-accent-cyan, #00d4ff);
-  margin-bottom: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.chat-content {
-  margin: 0;
-  white-space: pre-wrap;
-}
-
-.chat-sop-refs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 8px;
-}
-
-.chat-typing {
+/* ─── Header ──────────────────────────────────────────────────── */
+.chat__header {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px 16px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--line-faint);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.chat__context {
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--font-mono);
+}
+
+/* ─── Scroll region ───────────────────────────────────────────── */
+.chat__scroll {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+/* ─── System notice ───────────────────────────────────────────── */
+.chat__system {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius);
+  background: var(--surface-panel);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* ─── Messages ────────────────────────────────────────────────── */
+.chat__msg {
+  max-width: 94%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  animation: rise var(--ease-slow) both;
+}
+
+.chat__msg--user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.chat__msg--ai {
   align-self: flex-start;
 }
 
-.typing-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-text-muted, #94a3b8);
-  animation: pulse 1.2s ease-in-out infinite;
+.chat__msg-role {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-disabled);
 }
 
-.typing-dot:nth-child(2) {
-  animation-delay: 0.2s;
+.chat__msg-body {
+  padding: var(--space-3);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius);
+  font-size: var(--text-base);
+  line-height: var(--leading);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
-.typing-dot:nth-child(3) {
-  animation-delay: 0.4s;
+/* Operator's own words: recessed, so AI output leads visually. */
+.chat__msg--user .chat__msg-body {
+  background: var(--surface-raised);
+  border-color: var(--line);
+  color: var(--text-primary);
 }
 
-.chat-input-area {
+.chat__msg--ai .chat__msg-body {
+  background: var(--surface-panel);
+  color: var(--text-primary);
+  /* Hairline accent marks machine-generated content. */
+  border-left: 2px solid var(--accent-line);
+}
+
+.chat__msg-refs {
   display: flex;
-  gap: var(--space-2, 8px);
-  margin-top: var(--space-3, 12px);
-  padding-top: var(--space-3, 12px);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
+  gap: var(--space-1);
 }
 
-.chat-input {
-  flex: 1;
-  font-size: 0.85rem !important;
+/* ─── Thinking ────────────────────────────────────────────────── */
+.chat__thinking {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
-.btn-send {
-  padding: 8px 16px !important;
-  font-size: 0.85rem !important;
+/* ─── Quick prompts ───────────────────────────────────────────── */
+.chat__prompts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding-top: var(--space-4);
+}
+
+.chat__prompts-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-disabled);
+}
+
+.chat__prompt {
+  text-align: left;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-panel);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--ease), border-color var(--ease), color var(--ease);
+}
+
+.chat__prompt:hover:not(:disabled) {
+  background: var(--surface-raised);
+  border-color: var(--line);
+  color: var(--text-primary);
+}
+
+.chat__prompt:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── Composer ────────────────────────────────────────────────── */
+.chat__composer {
   flex-shrink: 0;
+  display: flex;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line-faint);
+  background: var(--surface-sunken);
+}
+
+.chat__input {
+  flex: 1;
+  min-width: 0;
 }

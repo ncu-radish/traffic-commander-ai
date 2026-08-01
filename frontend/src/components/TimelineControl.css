@@ -1,107 +1,176 @@
-.timeline-control {
+/* ═══════════════════════════════════════════════════════════════
+   Timeline — scrub control in the bottom tray
+   Flat track, no gradient fill, no glow on the transport button.
+   ═══════════════════════════════════════════════════════════════ */
+
+.timeline {
   display: flex;
   align-items: center;
-  gap: var(--space-4, 16px);
-  padding: var(--space-3, 12px) var(--space-4, 16px) !important;
+  gap: var(--space-4);
 }
 
-.timeline-play-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 2px solid rgba(0, 212, 255, 0.4);
-  background: rgba(0, 212, 255, 0.1);
-  color: #00d4ff;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: all var(--transition-fast, 150ms);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* ─── Transport ───────────────────────────────────────────────── */
+.timeline__play {
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+  transition: background var(--ease), border-color var(--ease), color var(--ease);
 }
 
-.timeline-play-btn:hover {
-  background: rgba(0, 212, 255, 0.2);
-  border-color: #00d4ff;
-  box-shadow: 0 0 12px rgba(0, 212, 255, 0.3);
+.timeline__play:hover:not(:disabled) {
+  background: #292A30;
+  border-color: var(--line-strong);
+  color: var(--text-primary);
 }
 
-.timeline-play-btn.playing {
-  background: rgba(0, 212, 255, 0.2);
-  border-color: #00d4ff;
-  animation: glow 2s ease-in-out infinite;
+/* Playing state: accent border only. Brightness, not bloom. */
+.timeline__play[data-playing='true'] {
+  border-color: var(--accent-line);
+  color: var(--accent-bright);
+  background: var(--accent-soft);
 }
 
-.timeline-track-wrapper {
+.timeline__play:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Track ───────────────────────────────────────────────────── */
+.timeline__track-area {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
-.timeline-track {
+.timeline__track {
   position: relative;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
-  overflow: visible;
+  height: 3px;
+  background: var(--line);
+  border-radius: 2px;
 }
 
-.timeline-progress {
+.timeline__elapsed {
   position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  background: linear-gradient(90deg, #00d4ff, #0091ff);
-  border-radius: 3px;
-  transition: width var(--transition-fast, 150ms);
+  inset: 0 auto 0 0;
+  background: var(--accent-dim, var(--accent));
+  border-radius: 2px;
+  transition: width var(--ease);
 }
 
-.timeline-slider {
+/* Tick per sample, so density of data is visible in the track. */
+.timeline__ticks {
   position: absolute;
-  top: -6px;
+  inset: 0;
+  pointer-events: none;
+}
+
+.timeline__tick {
+  position: absolute;
+  top: -2px;
+  width: 1px;
+  height: 7px;
+  background: var(--line-strong);
+  transform: translateX(-0.5px);
+}
+
+/* Samples that breached an SOP threshold. */
+.timeline__tick[data-level='A'] { background: var(--level-a); }
+.timeline__tick[data-level='B'] { background: var(--level-b); }
+
+.timeline__handle {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  margin-left: -5.5px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  border: 2px solid var(--surface-sunken);
+  transform: translateY(-50%);
+  transition: left var(--ease);
+  pointer-events: none;
+}
+
+/* Native range sits transparent on top for keyboard + drag. */
+.timeline__slider {
+  position: absolute;
+  top: -8px;
   left: 0;
   width: 100%;
-  height: 18px;
+  height: 19px;
+  margin: 0;
   opacity: 0;
   cursor: pointer;
-  margin: 0;
 }
 
-.timeline-labels {
+.timeline__slider:focus-visible + .timeline__handle {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ─── Labels ──────────────────────────────────────────────────── */
+.timeline__labels {
   display: flex;
   justify-content: space-between;
 }
 
-.timeline-label {
-  font-size: 0.65rem;
-  color: var(--color-text-muted, #64748b);
+.timeline__label {
+  padding: 0;
+  background: none;
+  border: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-disabled);
   cursor: pointer;
-  transition: color var(--transition-fast, 150ms);
-  user-select: none;
+  transition: color var(--ease);
 }
 
-.timeline-label:hover,
-.timeline-label.active {
-  color: #00d4ff;
+.timeline__label:hover {
+  color: var(--text-secondary);
 }
 
-.timeline-current {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+.timeline__label[data-active='true'] {
+  color: var(--accent-bright);
+}
+
+/* ─── Readout ─────────────────────────────────────────────────── */
+.timeline__readout {
   flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
 }
 
-.timeline-current-time {
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: #00d4ff;
-  font-variant-numeric: tabular-nums;
+.timeline__time {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.timeline-current-date {
-  font-size: 0.7rem;
-  color: var(--color-text-muted, #94a3b8);
+.timeline__date {
+  font-size: 10px;
+  color: var(--text-disabled);
+}
+
+.timeline__position {
+  font-size: 10px;
+  color: var(--text-disabled);
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--line);
+}
+
+@media (max-width: 1024px) {
+  .timeline__labels { display: none; }
+  .timeline__date { display: none; }
 }
