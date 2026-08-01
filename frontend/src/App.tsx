@@ -10,13 +10,21 @@ import MetricsBar from './components/MetricsBar';
 import TimelineControl from './components/TimelineControl';
 import CommuteRoutePanel from './components/CommuteRoutePanel';
 import FortuneDraw from './components/FortuneDraw';
+import StudentRoster from './components/StudentRoster';
+import DropOffConfirmModal from './components/DropOffConfirmModal';
 import type { LiveIncident, AlertBanner, TrafficSegment, CrowdDensity, RoadSegment, AccidentHotspots } from './types';
 import { API_BASE } from './config/api';
 import { COMMUTE_ROUTES, COMMUTE_ORIGIN, COMMUTE_DESTINATION } from './data/commuteRoutes';
 import { assessCommuteRoutes } from './services/commuteRouteRisk';
+import { useStudents } from './state/studentStore';
 import './App.css';
 
-function App() {
+interface AppProps {
+  /** 回到角色選擇。 */
+  onBack?: () => void;
+}
+
+function App({ onBack }: AppProps) {
   const [trafficFlowData, setTrafficFlowData] = useState<TrafficSegment[]>([]);
   const [crowdDensityData, setCrowdDensityData] = useState<CrowdDensity[]>([]);
   const [roadNetwork, setRoadNetwork] = useState<RoadSegment[]>([]);
@@ -38,6 +46,15 @@ function App() {
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   // 路線預設不顯示，按下地圖上的按鈕（或面板入口）才畫出來。
   const [showCommuteRoutes, setShowCommuteRoutes] = useState(false);
+
+  /**
+   * 校車學生名單。狀態放在 StudentContext（掛在 Root），
+   * 所以切到家長端再切回來，下車結果仍然在。
+   */
+  const { students, timelineEvents, confirmDropOff } = useStudents();
+  /** 等待確認下車的學生 id；null 代表沒有開啟確認視窗。 */
+  const [pendingDropOffId, setPendingDropOffId] = useState<string | null>(null);
+  const pendingStudent = students.find((s) => s.id === pendingDropOffId) ?? null;
 
   // 台北市開放資料：114年道路交通事故斑點圖，依路段比對後的統計。
   // 獨立 fetch、獨立失敗處理，缺這份資料不該讓整個 Dashboard 掛掉。
@@ -224,6 +241,16 @@ function App() {
     setAdvisoryOpen(true);
   }, []);
 
+  /**
+   * 老師確認下車。下車時間取時間軸當前位置，所以記錄下來的時間
+   * 與畫面上的時間軸讀數一致，事件也會落在對應的時間刻度上。
+   */
+  const handleConfirmDropOff = useCallback(() => {
+    if (!pendingDropOffId) return;
+    confirmDropOff(pendingDropOffId, currentTimestamp);
+    setPendingDropOffId(null);
+  }, [pendingDropOffId, confirmDropOff, currentTimestamp]);
+
   if (isLoading) {
     return (
       <div className="boot">
@@ -242,6 +269,7 @@ function App() {
         alertCount={visibleAlerts.length}
         currentTimestamp={currentTimestamp}
         onToggleAdvisory={() => setAdvisoryOpen((o) => !o)}
+        onBack={onBack}
       />
 
       <div className="alert-stack">
@@ -277,6 +305,9 @@ function App() {
               visible={showCommuteRoutes}
               onToggleVisible={() => setShowCommuteRoutes((v) => !v)}
             />
+
+            {/* 校車學生名單。面板自己有標頭，不再另外加 rail-label。 */}
+            <StudentRoster students={students} onRequestDropOff={setPendingDropOffId} />
 
             <div className="rail-label">
               即時指標
@@ -365,10 +396,20 @@ function App() {
           onTimestampChange={setCurrentTimestamp}
           onPlayToggle={() => setIsPlaying((p) => !p)}
           breaches={timelineBreaches}
+          events={timelineEvents}
         />
       </div>
 
       <FortuneDraw trafficData={currentTraffic} crowdData={currentCrowd} roadNetwork={roadNetwork} />
+
+      {pendingStudent && (
+        <DropOffConfirmModal
+          student={pendingStudent}
+          currentTime={currentTimestamp.split(' ')[1] ?? '--:--'}
+          onCancel={() => setPendingDropOffId(null)}
+          onConfirm={handleConfirmDropOff}
+        />
+      )}
     </div>
   );
 }

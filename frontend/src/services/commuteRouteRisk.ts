@@ -115,7 +115,10 @@ export function assessCommuteRoute(
   const level = measuredSegments > 0 ? saturationLevel(maxSaturation) : 'ok';
   const risk = toRisk(level, accidentIntensity);
 
-  /** 完全繞開主辦方路網的路線，沒有讀數可談，理由要另外寫清楚。 */
+  /**
+   * 保險分支：路廊完全繞開主辦方路網時沒有讀數可談，理由要另外寫清楚。
+   * 目前三條路線都行經路網路段，所以不會走到這裡。
+   */
   const offNetwork = route.segmentIds.length === 0;
 
   const reasons: string[] = [];

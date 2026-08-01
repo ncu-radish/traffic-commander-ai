@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { MapContainer, TileLayer, Polyline, Popup, CircleMarker, Marker, Tooltip, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import type {
@@ -9,26 +10,8 @@ import type {
   CommuteWaypoint,
 } from '../types';
 import { road, level, saturationColor, saturationWeight, threshold } from '../theme/tokens';
+import { SEGMENT_COORDINATES as segmentCoordinates } from '../data/roadNetwork';
 import './TrafficMap.css';
-
-/* ── Approximate geometry for Xinyi District segments ──────────── */
-const segmentCoordinates: Record<string, [number, number][]> = {
-  RD_TPE_001: [[25.0418, 121.5530], [25.0418, 121.5575], [25.0418, 121.5630]], // 忠孝東路四段
-  RD_TPE_002: [[25.0445, 121.5575], [25.0418, 121.5575], [25.0395, 121.5575]], // 光復南路
-  RD_TPE_003: [[25.0418, 121.5630], [25.0385, 121.5630], [25.0340, 121.5630]], // 基隆路一段
-  RD_TPE_004: [[25.0470, 121.5490], [25.0470, 121.5550], [25.0470, 121.5575]], // 市民大道四段
-  RD_TPE_005: [[25.0380, 121.5530], [25.0380, 121.5575], [25.0380, 121.5620]], // 仁愛路四段
-  RD_TPE_006: [[25.0445, 121.5530], [25.0418, 121.5530], [25.0380, 121.5530]], // 敦化南路一段
-  RD_TPE_007: [[25.0385, 121.5630], [25.0385, 121.5660], [25.0385, 121.5690]], // 松高路
-  RD_TPE_008: [[25.0418, 121.5510], [25.0380, 121.5510]],                       // 延吉街
-  RD_TPE_009: [[25.0430, 121.5640], [25.0418, 121.5640]],                       // 基隆路地下道
-  RD_TPE_010: [[25.0380, 121.5660], [25.0370, 121.5660], [25.0355, 121.5660]], // 市府路
-  RD_TPE_011: [[25.0360, 121.5630], [25.0360, 121.5660], [25.0360, 121.5690]], // 松壽路
-  RD_TPE_012: [[25.0375, 121.5530], [25.0340, 121.5530]],                       // 敦化南路二段
-  RD_TPE_013: [[25.0340, 121.5630], [25.0340, 121.5660], [25.0340, 121.5690]], // 信義路五段
-  RD_TPE_014: [[25.0385, 121.5690], [25.0360, 121.5690], [25.0340, 121.5690]], // 松智路
-  RD_TPE_015: [[25.0470, 121.5490], [25.0418, 121.5490]],                       // 復興南路一段
-};
 
 const stationCoordinates: Record<string, [number, number]> = {
   BS_TPE_DOME: [25.0430, 121.5570],
@@ -385,11 +368,34 @@ export default function TrafficMap({
           );
         })}
 
-        {/* ── 上下學路線模擬 ───────────────────────────────────
-            疊在路段之上：底層先畫一條深色描邊讓路線在彩色路網上讀得出來，
-            上層才是依路線身分上色的主線。三條一律虛線，各自的虛線樣式
-            不同，所以就算色弱也分得出是哪一條；建議路線線最粗。
-            這一段完全是附加圖層，沒有改動上面路段的任何上色邏輯。 */}
+        {/* ── 上下學路線模擬 · 描邊層 ─────────────────────────
+            所有路線的深色描邊都先畫完，彩色主線才畫在最上層。
+            分兩層是必要的：路線 2 與路線 3 有 74% 的路徑重疊，
+            若「描邊+主線」逐條畫，後一條的描邊會蓋掉前一條的顏色。 */}
+        {commuteRoutesVisible && commuteRoutes.map((assessment) => {
+          const { route, recommended } = assessment;
+          const dimmed = Boolean(selectedRouteId) && selectedRouteId !== route.id;
+          return (
+            <Polyline
+              key={`casing-${route.id}`}
+              positions={route.path}
+              interactive={false}
+              pathOptions={{
+                color: '#0E0E10',
+                weight: (recommended ? 6 : 4) + 4,
+                opacity: dimmed ? 0.25 : 0.75,
+                lineCap: 'round',
+                lineJoin: 'round',
+              }}
+            />
+          );
+        })}
+
+        {/* ── 上下學路線模擬 · 主線層 ─────────────────────────
+            三條路線共用同一個虛線週期（28px），相位錯開半個週期，
+            所以在重疊路段上實線段互不重疊，兩條都看得見。
+            建議路線線最粗。這一段完全是附加圖層，
+            沒有改動上面路段的任何上色邏輯。 */}
         {commuteRoutesVisible && commuteRoutes.map((assessment) => {
           const { route, recommended } = assessment;
           const isSelected = selectedRouteId === route.id;
@@ -399,19 +405,9 @@ export default function TrafficMap({
           const weight = recommended ? 6 : 4;
 
           return (
-            <div key={route.id}>
-              {/* 描邊：讓路線與底下的路段區分開。 */}
-              <Polyline
-                positions={route.path}
-                interactive={false}
-                pathOptions={{
-                  color: '#0E0E10',
-                  weight: weight + 4,
-                  opacity: dimmed ? 0.25 : 0.75,
-                  lineCap: 'round',
-                  lineJoin: 'round',
-                }}
-              />
+            // Fragment 而不是 div —— MapContainer 的子節點必須是 Leaflet 圖層，
+            // 包一層 div 會把它插進地圖容器的 DOM 裡。
+            <Fragment key={route.id}>
               <Polyline
                 positions={route.path}
                 pathOptions={{
@@ -419,6 +415,7 @@ export default function TrafficMap({
                   weight: isSelected ? weight + 2 : weight,
                   opacity: dimmed ? 0.3 : 1,
                   dashArray: route.dashArray,
+                  dashOffset: route.dashOffset,
                   lineCap: 'butt',
                   lineJoin: 'round',
                 }}
@@ -452,7 +449,8 @@ export default function TrafficMap({
                             : ''}
                       </dd>
 
-                      {/* 路線 3 不在主辦方路網內，沒有飽和度與事故統計可談。 */}
+                      {/* 保險分支：路廊完全不含主辦方路網路段時，
+                          沒有飽和度與事故統計可談。目前三條路線都在路網上。 */}
                       {assessment.totalSegments === 0 ? (
                         <>
                           <dt>壅塞</dt>
@@ -493,7 +491,7 @@ export default function TrafficMap({
                   </div>
                 </Popup>
               </Polyline>
-            </div>
+            </Fragment>
           );
         })}
 
@@ -678,6 +676,10 @@ export default function TrafficMap({
                 dashed
               />
             ))}
+            <span className="map-legend__note">
+              路線 2、3 共用仁愛路四段與市府路北段，重疊處三色虛線交錯呈現；
+              點選路線可單獨檢視。
+            </span>
           </div>
         )}
 

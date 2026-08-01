@@ -1,5 +1,16 @@
 import './TimelineControl.css';
 
+/**
+ * 標在時間軸上的離散事件（目前是學生下車）。
+ * 形狀保持最小，這個元件不必知道事件從哪個模組來。
+ */
+export interface TimelineEventMarker {
+  id: string;
+  /** 必須是 timestamps 裡的其中一個值，否則不畫。 */
+  timestamp: string;
+  label: string;
+}
+
 interface TimelineControlProps {
   timestamps: string[];
   currentTimestamp: string;
@@ -12,6 +23,11 @@ interface TimelineControlProps {
    * evening the incidents cluster before scrubbing there.
    */
   breaches?: Record<string, 'A' | 'B'>;
+  /**
+   * 事件標記。與 breaches 的刻度共用同一條軌道但形狀不同（菱形），
+   * 所以「SOP 門檻」與「發生過的事件」在同一條時間軸上分得開。
+   */
+  events?: TimelineEventMarker[];
 }
 
 /** Roughly 8 labels regardless of sample count. */
@@ -24,6 +40,7 @@ export default function TimelineControl({
   onTimestampChange,
   onPlayToggle,
   breaches = {},
+  events = [],
 }: TimelineControlProps) {
   if (timestamps.length === 0) {
     return (
@@ -89,6 +106,25 @@ export default function TimelineControl({
           />
 
           <span className="timeline__handle" style={{ left: `${progress}%` }} />
+
+          {/* 事件標記放在滑桿之後才會疊在它上面，hover 提示才顯示得出來。
+              代價是標記那幾個 px 不能拖曳，但軌道其餘部分與鍵盤操作不受影響。
+              註：必須排在 .timeline__handle 之後，否則會破壞
+              `.timeline__slider:focus-visible + .timeline__handle` 的相鄰選擇器。 */}
+          <div className="timeline__events">
+            {events.map((event) => {
+              const index = timestamps.indexOf(event.timestamp);
+              if (index < 0) return null;
+              return (
+                <span
+                  key={event.id}
+                  className="timeline__event"
+                  style={{ left: `${lastIndex > 0 ? (index / lastIndex) * 100 : 0}%` }}
+                  title={event.label}
+                />
+              );
+            })}
+          </div>
         </div>
 
         <div className="timeline__labels">

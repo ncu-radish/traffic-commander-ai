@@ -1,11 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
+import Header from './components/Header';
 import TrafficMap from './components/TrafficMap';
+import TrafficChart from './components/TrafficChart';
+import CrowdChart from './components/CrowdChart';
 import TimelineControl from './components/TimelineControl';
 import FortuneDraw from './components/FortuneDraw';
+import ParentStudentPanel from './components/ParentStudentPanel';
 import type { LiveIncident, TrafficSegment, RoadSegment, CrowdDensity, AccidentHotspots } from './types';
 import { API_BASE } from './config/api';
 import { COMMUTE_ROUTES, COMMUTE_ORIGIN, COMMUTE_DESTINATION } from './data/commuteRoutes';
 import { assessCommuteRoutes } from './services/commuteRouteRisk';
+import { useStudents } from './state/studentStore';
 // 地圖外框 (.map-frame / .map-caption) 與底部時間軸托盤 (.timeline-tray)
 // 直接沿用校方端的樣式，讓兩端的壅塞地圖與時間軸長得一模一樣，
 // 不另外複製一份 CSS。
@@ -44,6 +49,13 @@ export default function UserView({ onBack }: UserViewProps) {
   // 家長方只在地圖上看路線，右側不放比較面板。
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [showCommuteRoutes, setShowCommuteRoutes] = useState(false);
+
+  /**
+   * 學生狀態與通知，與校方端同一份 StudentContext。
+   * 老師在校方端確認下車後，這裡的狀態、下車時間、時間軸事件與
+   * 通知卡片會是同一個結果，切換角色也不會消失。
+   */
+  const { students, timelineEvents, notifications, dismissNotification } = useStudents();
 
 
   useEffect(() => {
@@ -133,11 +145,13 @@ export default function UserView({ onBack }: UserViewProps) {
 
   return (
     <div className="user-view">
-      <header className="user-view__header">
-        <button className="user-view__back" onClick={onBack}>← 切換視角</button>
-        <span className="user-view__title">信義計畫區 路況地圖</span>
-        <span className="user-view__badge">家長方模式</span>
-      </header>
+      {/* 與校方端同一個 Header 元件，所以最上方那一行的樣式完全一致。
+          家長端沒有事件注入，計數器省略不傳；改帶角色標籤。 */}
+      <Header
+        currentTimestamp={currentTimestamp}
+        onBack={onBack}
+        roleLabel="家長方模式"
+      />
 
       <div className="user-view__body">
         {/* 與校方端同一個地圖外框（.map-frame + .map-caption）。 */}
@@ -167,9 +181,39 @@ export default function UserView({ onBack }: UserViewProps) {
           />
         </div>
 
-        {/* 右側欄先留白：欄位寬度保留，地圖才不會變成滿版。
-            上下學路線的比較面板只放在校方端，家長方在地圖上看路線即可。 */}
-        <aside className="user-view__sidebar" aria-label="待補功能區" />
+        {/* 右側欄放學生狀態與下車通知。通知是版面的一部分，
+            所以不會浮在地圖上遮住路況。
+            上下學路線的比較面板仍只放在校方端。 */}
+        <aside className="user-view__sidebar" aria-label="孩子狀態與趨勢圖">
+          <ParentStudentPanel
+            students={students}
+            notifications={notifications}
+            onDismissNotification={dismissNotification}
+          />
+
+          {/* 與校方端同一組 .chart-card 外框與同兩個圖表元件，
+              尺寸、間距、顏色、hover 與 tooltip 全部沿用，這裡只是
+              改成一上一下排列。 */}
+          <div className="chart-card">
+            <div className="chart-card__header">車流飽和度趨勢</div>
+            <div className="chart-card__body">
+              <TrafficChart
+                trafficData={trafficFlowData}
+                currentTimestamp={currentTimestamp}
+              />
+            </div>
+          </div>
+
+          <div className="chart-card">
+            <div className="chart-card__header">人流密度趨勢</div>
+            <div className="chart-card__body">
+              <CrowdChart
+                crowdData={crowdDensityData}
+                currentTimestamp={currentTimestamp}
+              />
+            </div>
+          </div>
+        </aside>
       </div>
 
       {/* 底部時間軸，與校方端同一個 TimelineControl 元件與同一組 props。 */}
@@ -181,6 +225,7 @@ export default function UserView({ onBack }: UserViewProps) {
           onTimestampChange={setCurrentTimestamp}
           onPlayToggle={() => setIsPlaying((p) => !p)}
           breaches={timelineBreaches}
+          events={timelineEvents}
         />
       </div>
 
