@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { TrafficSegment, CrowdDensity } from '../types';
 import './FortuneDraw.css';
 
@@ -92,6 +92,16 @@ const CROWD_LIST_SIZE = 3;
 export default function FortuneDraw({ trafficData, crowdData }: FortuneDrawProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [result, setResult] = useState<FortuneResult | null>(null);
+
+  // 彈窗開啟時鎖住背景頁面捲動，滑鼠滾輪只會捲動籤詩卡本身
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
 
   const draw = () => {
     if (trafficData.length === 0) return;

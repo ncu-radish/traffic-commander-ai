@@ -37,11 +37,13 @@
   inset: 0;
   z-index: var(--z-modal);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: rgba(5, 7, 15, 0.72);
   backdrop-filter: blur(6px);
-  padding: var(--space-6);
+  padding: var(--space-10) var(--space-6);
   animation: fortune-fade-in var(--transition-normal) ease;
 }
 
