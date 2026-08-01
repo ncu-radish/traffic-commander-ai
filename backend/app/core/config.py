@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     AWS_DEFAULT_REGION: str = "us-east-1"
     AWS_BEDROCK_MODEL_ID: str = "anthropic.claude-3-haiku-20240307-v1:0"
 
+    # OpenWeather Settings
+    OPENWEATHER_API_KEY: str = ""
+    OPENWEATHER_BASE_URL: str = "https://api.openweathermap.org/data/2.5"
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 settings = Settings()
