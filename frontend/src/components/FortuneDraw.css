@@ -389,9 +389,11 @@
   border: 1px solid;
   background: rgba(255, 255, 255, 0.5);
 }
-.fortune-tag--good { color: #1f8a4c; border-color: rgba(31, 138, 76, 0.4); }
-.fortune-tag--fair { color: #b3760f; border-color: rgba(179, 118, 15, 0.4); }
-.fortune-tag--bad  { color: #c0392b; border-color: rgba(192, 57, 43, 0.4); }
+.fortune-tag--excellent { color: #1f8a4c; border-color: rgba(31, 138, 76, 0.4); }
+.fortune-tag--good      { color: #2f8f6f; border-color: rgba(47, 143, 111, 0.4); }
+.fortune-tag--neutral   { color: #b3760f; border-color: rgba(179, 118, 15, 0.4); }
+.fortune-tag--caution   { color: #c2660f; border-color: rgba(194, 102, 15, 0.45); }
+.fortune-tag--severe    { color: #c0392b; border-color: rgba(192, 57, 43, 0.4); }
 
 .fortune-score-row {
   display: flex;
