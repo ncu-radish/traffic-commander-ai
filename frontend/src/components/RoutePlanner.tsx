@@ -40,6 +40,25 @@ export default function RoutePlanner({ roadNetwork, activeIncidents, currentTime
   routeRef.current = route;
   const checkedIncidentIdsRef = useRef<Set<string>>(new Set());
 
+  /**
+   * 「影響路線」不是只有事故路段本身在我的行駛路徑上，
+   * 事故路段跟我路徑上某一段路「路口交叉」也算——現實中路口封閉會回堵、
+   * 影響到經過同一路口的其他方向車流，不是只有真正在那條路上開的人受影響。
+   */
+  const incidentTouchesRoute = useCallback(
+    (affectedSegmentId: string, path: string[]) => {
+      if (path.includes(affectedSegmentId)) return true;
+      const affected = roadNetwork.find((s) => s.segmentId === affectedSegmentId);
+      if (!affected) return false;
+      return path.some((segId) => {
+        const seg = roadNetwork.find((s) => s.segmentId === segId);
+        if (!seg) return false;
+        return seg.intersections.includes(affected.name) || affected.intersections.includes(seg.name);
+      });
+    },
+    [roadNetwork],
+  );
+
   const runPlan = useCallback(
     async (blocked: string[]): Promise<RouteResult> => {
       if (!startId || !endId) return { path: [], pathNames: [], cost: null, reachable: false };
@@ -84,7 +103,7 @@ export default function RoutePlanner({ roadNetwork, activeIncidents, currentTime
     checkedIncidentIdsRef.current = new Set(activeIncidents.map((i) => i.eventId));
 
     const blockedIds = activeIncidents.map((i) => i.affectedSegment);
-    const affectedIncident = newIncidents.find((i) => current.path.includes(i.affectedSegment));
+    const affectedIncident = newIncidents.find((i) => incidentTouchesRoute(i.affectedSegment, current.path));
 
     if (!affectedIncident) {
       setCheckModal({ status: 'clear', checkedSegment: newIncidents.map((i) => i.affectedSegment).join('、') });

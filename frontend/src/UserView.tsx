@@ -69,6 +69,25 @@ export default function UserView({ onBack }: UserViewProps) {
   const currentTraffic = trafficFlowData.filter((d) => d.timestamp === currentTimestamp);
   const currentCrowd = crowdDensityData.filter((d) => d.timestamp === currentTimestamp);
 
+  // 路線規劃好之後，地圖聚焦在「路線本身」+「跟路線路口交叉的路段」——
+  // 跟 RoutePlanner 判斷事件是否影響路線用的是同一套「路口交叉」邏輯，維持一致。
+  const focusSegmentIds = (() => {
+    if (routePath.length === 0) return undefined;
+    const byId = new Map(roadNetwork.map((s) => [s.segmentId, s]));
+    const focus = new Set(routePath);
+    for (const segId of routePath) {
+      const seg = byId.get(segId);
+      if (!seg) continue;
+      for (const other of roadNetwork) {
+        if (focus.has(other.segmentId)) continue;
+        if (seg.intersections.includes(other.name) || other.intersections.includes(seg.name)) {
+          focus.add(other.segmentId);
+        }
+      }
+    }
+    return Array.from(focus);
+  })();
+
   const handleInjectIncident = useCallback((incident: LiveIncident) => {
     setActiveIncidents((prev) => {
       if (prev.find((i) => i.eventId === incident.eventId)) return prev;
@@ -96,6 +115,7 @@ export default function UserView({ onBack }: UserViewProps) {
             activeIncidents={activeIncidents}
             routePathIds={routePath}
             accidentHotspots={accidentHotspots}
+            focusSegmentIds={focusSegmentIds}
           />
         </div>
 

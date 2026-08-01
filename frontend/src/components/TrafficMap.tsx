@@ -63,6 +63,12 @@ interface TrafficMapProps {
   accidentHotspots?: AccidentHotspots | null;
   /** 使用者導航模擬（RoutePlanner）算出的多跳路徑，與 primary/secondary（SOP2單跳）分開畫。 */
   routePathIds?: string[];
+  /**
+   * 有值時只保留這些路段（含事故熱點）的完整顯示，其餘路段淡出——
+   * 選好路線後聚焦在跟這趟行程有關的路況，不用整張圖的雜訊。
+   * 沒有值（尚未規劃路線）時維持顯示全部15條路段。
+   */
+  focusSegmentIds?: string[];
 }
 
 /** 依事故數決定熱點圈的半徑，數量越多圈越大，而非固定大小的裝飾用圖示。 */
@@ -84,11 +90,14 @@ export default function TrafficMap({
   secondaryRouteIds = [],
   accidentHotspots,
   routePathIds = [],
+  focusSegmentIds,
 }: TrafficMapProps) {
   const trafficLookup = new Map<string, TrafficSegment>();
   trafficData.forEach((t) => trafficLookup.set(t.segmentId, t));
 
   const affectedSegmentIds = new Set(activeIncidents.map((i) => i.affectedSegment));
+  const hasFocus = Boolean(focusSegmentIds && focusSegmentIds.length > 0);
+  const focusSet = new Set(focusSegmentIds ?? []);
   const secondarySet = new Set(secondaryRouteIds);
   const routePathSet = new Set(routePathIds);
 
@@ -165,6 +174,14 @@ export default function TrafficMap({
             weight = 6;
             dashArray = '3 7';
             opacity = 1;
+          }
+
+          // 路線規劃完成後，只留下跟這趟行程有關的路段（路線本身、事故、SOP2疏散建議），
+          // 其餘路段淡出但不完全消失，仍看得出路網骨架。
+          const isRelevantToFocus = isOnUserRoute || isAffected || isPrimary || isSecondary || focusSet.has(segment.segmentId);
+          if (hasFocus && !isRelevantToFocus) {
+            opacity = 0.08;
+            weight = Math.min(weight, 1.5);
           }
 
           return (
@@ -265,6 +282,7 @@ export default function TrafficMap({
         {accidentHotspots &&
           Object.entries(accidentHotspots.segments).map(([segId, hotspot]) => {
             if (hotspot.total === 0) return null;
+            if (hasFocus && !focusSet.has(segId)) return null;
             const coords = segmentCoordinates[segId];
             if (!coords) return null;
             return (
