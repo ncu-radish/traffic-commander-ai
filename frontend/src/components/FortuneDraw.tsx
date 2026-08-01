@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import type { TrafficSegment } from '../types';
+import type { TrafficSegment, CrowdDensity } from '../types';
 import './FortuneDraw.css';
 
 interface FortuneDrawProps {
   trafficData: TrafficSegment[];
+  crowdData: CrowdDensity[];
 }
 
 type FortuneTier = 'good' | 'fair' | 'bad';
@@ -66,24 +67,51 @@ function tierFromSaturation(score: number): FortuneTier {
   return 'good';
 }
 
+function tierFromCrowd(c: CrowdDensity): FortuneTier {
+  if (c.roamingUserPct >= 0.30 || c.growthRate > 0.30 || c.userCount > 25000) return 'bad';
+  if (c.growthRate > 0.10) return 'fair';
+  return 'good';
+}
+
 function statusLabel(tier: FortuneTier): string {
   if (tier === 'bad') return 'A 級・癱瘓';
   if (tier === 'fair') return 'B 級・壅擠';
   return '正常';
 }
 
-export default function FortuneDraw({ trafficData }: FortuneDrawProps) {
+interface FortuneResult {
+  verse: FortuneVerse;
+  headline: TrafficSegment;
+  congestedRoads: TrafficSegment[];
+  crowdedSpots: CrowdDensity[];
+}
+
+const ROAD_LIST_SIZE = 4;
+const CROWD_LIST_SIZE = 3;
+
+export default function FortuneDraw({ trafficData, crowdData }: FortuneDrawProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [result, setResult] = useState<{ verse: FortuneVerse; segment: TrafficSegment } | null>(null);
+  const [result, setResult] = useState<FortuneResult | null>(null);
 
   const draw = () => {
     if (trafficData.length === 0) return;
-    // 抽出目前飽和度最高（最壅塞）的路段，讓籤詩結果對應真實路況
-    const segment = [...trafficData].sort((a, b) => b.saturationScore - a.saturationScore)[0];
-    const tier = tierFromSaturation(segment.saturationScore);
+
+    const roadsByCongestion = [...trafficData].sort((a, b) => b.saturationScore - a.saturationScore);
+    const headline = roadsByCongestion[0];
+    const tier = tierFromSaturation(headline.saturationScore);
     const pool = VERSES[tier];
     const verse = pool[Math.floor(Math.random() * pool.length)];
-    setResult({ verse, segment });
+
+    const crowdedSpots = [...crowdData]
+      .sort((a, b) => b.userCount - a.userCount)
+      .slice(0, CROWD_LIST_SIZE);
+
+    setResult({
+      verse,
+      headline,
+      congestedRoads: roadsByCongestion.slice(0, ROAD_LIST_SIZE),
+      crowdedSpots,
+    });
     setIsOpen(true);
   };
 
@@ -112,23 +140,45 @@ export default function FortuneDraw({ trafficData }: FortuneDrawProps) {
               ))}
             </div>
 
-            <div className="fortune-divider">— 籤 解 —</div>
+            <div className="fortune-divider">— 籤 解：全城壅塞路段 —</div>
 
-            <div className="fortune-reading">
-              <div className="fortune-reading-row">
-                <span className="fortune-reading-key">路段</span>
-                <span className="fortune-reading-value">{result.segment.roadName}（{result.segment.segmentId}）</span>
-              </div>
-              <div className="fortune-reading-row">
-                <span className="fortune-reading-key">飽和度</span>
-                <span className="fortune-reading-value">{(result.segment.saturationScore * 100).toFixed(0)}%</span>
-              </div>
-              <div className="fortune-reading-row">
-                <span className="fortune-reading-key">狀態</span>
-                <span className={`fortune-reading-pill fortune-reading-pill--${result.verse.tier}`}>
-                  {statusLabel(result.verse.tier)}
-                </span>
-              </div>
+            <div className="fortune-list">
+              {result.congestedRoads.map((seg) => {
+                const t = tierFromSaturation(seg.saturationScore);
+                return (
+                  <div className="fortune-list-row" key={seg.segmentId}>
+                    <span className="fortune-list-name">{seg.roadName}</span>
+                    <span className="fortune-list-meta">
+                      {(seg.saturationScore * 100).toFixed(0)}%
+                      <span className={`fortune-reading-pill fortune-reading-pill--${t}`}>
+                        {statusLabel(t)}
+                      </span>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="fortune-divider">— 籤 解：人潮聚集地點 —</div>
+
+            <div className="fortune-list">
+              {result.crowdedSpots.length === 0 && (
+                <div className="fortune-list-empty">目前無人流資料</div>
+              )}
+              {result.crowdedSpots.map((spot) => {
+                const t = tierFromCrowd(spot);
+                return (
+                  <div className="fortune-list-row" key={spot.bsId}>
+                    <span className="fortune-list-name">{spot.locationName}</span>
+                    <span className="fortune-list-meta">
+                      {spot.userCount.toLocaleString()} 人
+                      <span className={`fortune-reading-pill fortune-reading-pill--${t}`}>
+                        漫遊 {(spot.roamingUserPct * 100).toFixed(0)}%
+                      </span>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
 
             <button className="fortune-close" onClick={() => setIsOpen(false)}>收下籤詩</button>
