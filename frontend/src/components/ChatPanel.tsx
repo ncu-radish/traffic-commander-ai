@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import type { ChatMessage } from '../types';
+import { API_BASE } from '../config/api';
 import './ChatPanel.css';
 
-const CHAT_ENDPOINT = 'http://localhost:8000/api/chat/';
+const CHAT_ENDPOINT = `${API_BASE}/chat/`;
 
 /** Seeded What-if prompts — lowers friction during a live demo. */
 const QUICK_PROMPTS = [

@@ -1,25 +1,28 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import TrafficMap from './components/TrafficMap';
-import IncidentPanel from './components/IncidentPanel';
 import RoutePlanner from './components/RoutePlanner';
+import IncidentPanel from './components/IncidentPanel';
+import TimelineControl from './components/TimelineControl';
 import FortuneDraw from './components/FortuneDraw';
 import AlertBannerComponent from './components/AlertBanner';
-import TimelineControl from './components/TimelineControl';
 import AdvisorySummaryModal from './components/AdvisorySummaryModal';
 import type { LiveIncident, TrafficSegment, RoadSegment, CrowdDensity, AccidentHotspots } from './types';
 import { saturationColor, saturationLevel } from './theme/tokens';
 import { useSopAlerts } from './hooks/useSopAlerts';
 import { useAdvisoryReport } from './hooks/useAdvisoryReport';
+import { API_BASE } from './config/api';
+import { COMMUTE_ROUTES, COMMUTE_ORIGIN, COMMUTE_DESTINATION } from './data/commuteRoutes';
+import { assessCommuteRoutes } from './services/commuteRouteRisk';
 import './UserView.css';
-
-const API_BASE = 'http://localhost:8000/api';
 
 interface UserViewProps {
   onBack: () => void;
 }
 
 /**
- * 家長視角：地圖為主，壅塞路段 + 時間軸 + 事件注入 + 路線規劃 + 沿途路況籤詩為輔。
+ * 家長視角：地圖為主，壅塞路段 + 時間軸 + 事件注入 + 路線規劃 + 沿途路況籤詩為輔，
+ * 加上與校方端共用的上下學路線模擬（畫在地圖上；路線比較面板只放校方端，
+ * 家長端把面板空間留給事件注入／路線規劃）。
  * 與校方版（App.tsx）共用同一個後端，但不顯示完整的分析面板（圖表、AI對話諮詢）。
  */
 export default function UserView({ onBack }: UserViewProps) {
@@ -37,6 +40,11 @@ export default function UserView({ onBack }: UserViewProps) {
   const [pickingActive, setPickingActive] = useState(false);
   const [pickedStart, setPickedStart] = useState<{ segmentId: string; name: string } | null>(null);
   const [userPositionPoint, setUserPositionPoint] = useState<[number, number] | null>(null);
+  // 點選路段後的高亮，跟校方端同一套互動。
+  const [focusedSegmentId, setFocusedSegmentId] = useState<string | null>(null);
+  // 上下學路線模擬：地圖上的路線與開關，與校方端同一套資料與評估函式。
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  const [showCommuteRoutes, setShowCommuteRoutes] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -58,9 +66,9 @@ export default function UserView({ onBack }: UserViewProps) {
         setLiveIncidents(incidentsData);
 
         const timestamps = [...new Set(trafficData.map((d: TrafficSegment) => d.timestamp))].sort() as string[];
+        // 與校方端一致：從第一個時間點開始，交由底部時間軸拖拉或播放。
         setAvailableTimestamps(timestamps);
-        // 預設停在最新一筆，但家長可以自己拖時間軸回顧之前的路況。
-        if (timestamps.length > 0) setCurrentTimestamp(timestamps[timestamps.length - 1]);
+        if (timestamps.length > 0) setCurrentTimestamp(timestamps[0]);
       } catch (error) {
         console.error('UserView fetch error:', error);
       } finally {
@@ -128,6 +136,16 @@ export default function UserView({ onBack }: UserViewProps) {
     requestAdvisory,
     close: closeAdvisory,
   } = useAdvisoryReport();
+
+  /**
+   * 上下學路線評估。與校方端 (App.tsx) 共用同一份 COMMUTE_ROUTES
+   * 與同一個 assessCommuteRoutes()，所以兩端地圖上的三條路線、
+   * 分級與推薦結果完全一致。
+   */
+  const commuteAssessments = useMemo(
+    () => assessCommuteRoutes(COMMUTE_ROUTES, currentTraffic, accidentHotspots),
+    [currentTraffic, accidentHotspots],
+  );
 
   // 路線規劃好之後，地圖聚焦在「路線本身」+「跟路線路口交叉的路段」——
   // 跟 RoutePlanner 判斷事件是否影響路線用的是同一套「路口交叉」邏輯，維持一致。
@@ -197,6 +215,15 @@ export default function UserView({ onBack }: UserViewProps) {
             focusSegmentIds={focusSegmentIds}
             onMapClick={pickingActive ? handleMapClick : undefined}
             userPositionPoint={userPositionPoint}
+            selectedSegmentId={focusedSegmentId}
+            onSelectSegment={setFocusedSegmentId}
+            commuteRoutes={commuteAssessments}
+            commuteOrigin={COMMUTE_ORIGIN}
+            commuteDestination={COMMUTE_DESTINATION}
+            selectedRouteId={selectedRouteId}
+            onSelectRoute={setSelectedRouteId}
+            commuteRoutesVisible={showCommuteRoutes}
+            onToggleCommuteRoutes={() => setShowCommuteRoutes((v) => !v)}
           />
         </div>
 

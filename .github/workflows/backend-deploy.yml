@@ -1,0 +1,83 @@
+name: Deploy Backend to AWS EC2
+
+on:
+  push:
+    branches:
+      - main  # 僅在推送到 main 時執行
+    paths:
+      - 'backend/**'  # 僅在 backend 目錄有異動時才發動部署
+      - '.github/workflows/backend-deploy.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    # 自動取得 GitHub Actions 執行的 Runner IP，並動態加入 EC2 安全群組 (確保 SSH 通暢)
+    - name: Get GitHub Actions IP
+      id: ip
+      run: echo "IPV4=$(curl -s https://api.ipify.org)" >> $GITHUB_OUTPUT
+
+    # 顯示偵測到的 IP，方便排查問題
+    - name: Debug Runner IP
+      run: echo "Runner IP is ${{ steps.ip.outputs.IPV4 }}"
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2  # 務必確認是您 EC2 所在的 Region
+
+    - name: Temporarily Add Runner IP to EC2 Security Group
+      run: |
+        echo "Adding ${{ steps.ip.outputs.IPV4 }}/32 to SG ${{ secrets.EC2_SG_ID }}"
+        aws ec2 authorize-security-group-ingress \
+          --group-id ${{ secrets.EC2_SG_ID }} \
+          --protocol tcp \
+          --port 22 \
+          --cidr ${{ steps.ip.outputs.IPV4 }}/32
+        echo "Security Group rule added successfully"
+      # 移除 || true：若此步驟失敗（權限不足/SG ID 錯誤），立即中止，避免 SSH 白白等待 timeout
+      # 唯一需要 || true 的情境：規則重複（exit code 400）。需要時可改為：
+      # ... || { aws ec2 describe-security-groups ...; exit 0; }
+
+    # 遠端 SSH 連線至 EC2 執行更新與重啟
+    - name: Deploy to EC2 via SSH
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        timeout: 30s          # TCP 連線逾時（預設無限等待）
+        command_timeout: 10m  # 遠端指令最長執行時間
+        script: |
+          cd ~/traffic-commander-ai
+          git pull origin main
+
+          # 進入後端目錄更新套件 (若 requirements.txt 有變動)
+          cd backend
+          source .venv/bin/activate
+          pip install -r requirements.txt
+
+          # 重啟 systemd 後端服務
+          sudo systemctl restart traffic-commander.service
+
+          # 確認服務確實啟動成功（失敗時讓 pipeline 標紅）
+          sleep 3
+          sudo systemctl is-active --quiet traffic-commander.service \
+            && echo "Service is running" \
+            || { sudo systemctl status traffic-commander.service --no-pager; exit 1; }
+
+    # 部署完畢後，安全地將 Runner IP 從 Security Group 中移除
+    - name: Remove Runner IP from Security Group
+      if: always()
+      run: |
+        aws ec2 revoke-security-group-ingress \
+          --group-id ${{ secrets.EC2_SG_ID }} \
+          --protocol tcp \
+          --port 22 \
+          --cidr ${{ steps.ip.outputs.IPV4 }}/32 || true

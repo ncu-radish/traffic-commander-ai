@@ -1,0 +1,244 @@
+/* ═══════════════════════════════════════════════════════════════
+   CommuteRoutePanel — 上下學路線比較
+
+   沿用既有 .panel / .badge / .btn / .is-a|is-b|is-ok 語彙與 token，
+   不另立配色。風險一律「圖示 + 文字 + 顏色」三重標示。
+   ═══════════════════════════════════════════════════════════════ */
+
+.commute {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ─── 起訖點 ───────────────────────────────────────────────── */
+.commute__od {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--line-faint);
+  background: var(--surface-sunken);
+}
+
+.commute__od-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.commute__od-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.commute__od-dot--from {
+  background: var(--text-primary);
+}
+
+.commute__od-dot--to {
+  background: var(--level-ok);
+}
+
+.commute__od-label {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.commute__od-detail {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── 推薦結論 ─────────────────────────────────────────────── */
+.commute__verdict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--line-faint);
+  background: var(--status-soft, var(--surface-raised));
+}
+
+.commute__verdict-tag {
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--status-line, var(--line));
+  color: var(--status, var(--text-secondary));
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.commute__verdict-name {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.commute__verdict-note {
+  flex-basis: 100%;
+  font-size: 10px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* ─── 路線清單 ─────────────────────────────────────────────── */
+.commute__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.commute__item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 0;
+  border-bottom: 1px solid var(--line-faint);
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--ease), border-color var(--ease);
+}
+
+.commute__item:hover {
+  background: var(--surface-raised);
+}
+
+.commute__item[data-selected='true'] {
+  background: var(--surface-raised);
+  border-left-color: var(--status, var(--accent));
+}
+
+.commute__item[data-recommended='true'] {
+  border-left-color: var(--status, var(--level-ok));
+}
+
+.commute__item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.commute__item-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.commute__item-name {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* 對應地圖線條的色塊。虛線紋理由 inline 的 repeating-linear-gradient
+   帶入，顏色來自 theme/tokens，這裡只負責尺寸。 */
+.commute__swatch {
+  width: 22px;
+  height: 3px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.commute__item-top .badge {
+  margin-left: auto;
+}
+
+.commute__item-summary {
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+/* ─── 三項指標 ─────────────────────────────────────────────── */
+.commute__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.commute__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.commute__stat-label {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--text-disabled);
+}
+
+.commute__stat-value {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.commute__stat-sub {
+  color: var(--status, var(--text-muted));
+}
+
+/* ─── 判定理由 ─────────────────────────────────────────────── */
+.commute__reasons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.commute__reasons li {
+  position: relative;
+  padding-left: var(--space-3);
+  font-size: 10px;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+
+.commute__reasons li::before {
+  content: '·';
+  position: absolute;
+  left: var(--space-1);
+  color: var(--text-disabled);
+}
+
+.commute__flag {
+  align-self: flex-start;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--level-ok);
+}
+
+.commute__foot {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--line-faint);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-disabled);
+}

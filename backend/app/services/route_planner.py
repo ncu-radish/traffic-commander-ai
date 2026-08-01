@@ -10,22 +10,63 @@ Selection rules (from emergency_traffic_sop.txt):
 6. Downstream intersecting roads = secondary evacuation only
 7. If primary route is congested (>=0.85), keep it but activate extended green
 """
-from typing import List, Dict, Any, Optional
+import re
+from typing import List, Dict, Any, Optional, Tuple
 from app.models.schemas import RoutePlanResult, ExcludedRoute, SignalAdjustment
+
+
+def _road_name_aliases(name: str) -> List[str]:
+    """
+    Return matchable forms of a road name.
+    e.g. "忠孝東路四段" -> ["忠孝東路四段", "忠孝東路"]
+    Incident location strings often omit the 段 suffix
+    ("光復南路與忠孝東路口南側"), so the stripped form is needed.
+    """
+    aliases = [name]
+    stripped = re.sub(r"[一二三四五六七八九十\d]+段$", "", name)
+    if stripped and stripped != name:
+        aliases.append(stripped)
+    return aliases
+
+
+def _locate_accident_index(
+    incident_location: Optional[str],
+    intersections: List[str],
+) -> Optional[int]:
+    """
+    Find which intersection the accident sits at, by matching the incident
+    location text against the ordered intersection list.
+
+    Returns the index in `intersections`, or None if it cannot be determined.
+    Intersections at index <= returned value are upstream of the accident
+    (traffic can still be diverted there); later ones are downstream.
+    """
+    if not incident_location:
+        return None
+
+    for idx, cross in enumerate(intersections):
+        for alias in _road_name_aliases(cross):
+            if alias in incident_location:
+                return idx
+    return None
 
 
 def plan_routes(
     affected_segment_id: str,
     road_network: List[Dict[str, Any]],
     traffic_data: List[Dict[str, Any]],
+    incident_location: Optional[str] = None,
 ) -> RoutePlanResult:
     """
     Plan alternative routes for a blocked/closed road segment.
-    
+
     Args:
         affected_segment_id: The segment_id of the affected road
         road_network: Full road network (snake_case keys)
         traffic_data: Current traffic flow data (pandas-style dicts with original CSV column names)
+        incident_location: Free-text incident location, used to pin down which
+            intersection the accident sits at so upstream/downstream can be
+            resolved exactly instead of guessed.
     """
     # Build lookup maps
     network_map: Dict[str, Dict] = {}
@@ -46,8 +87,12 @@ def plan_routes(
     intersections = affected.get("intersections", [])  # ordered upstream → downstream
     affected_name = affected.get("name", affected_segment_id)
 
-    primary_candidates = []
-    secondary_candidates = []
+    # Pin the accident to a specific intersection so upstream/downstream is
+    # decided by SOP's ordering rather than a midpoint guess.
+    accident_idx = _locate_accident_index(incident_location, intersections)
+
+    primary_candidates: List[Tuple[str, str, float]] = []
+    secondary_candidates: List[Tuple[str, str, float]] = []
     excluded: List[ExcludedRoute] = []
 
     for alt_id in alternatives:
@@ -66,45 +111,50 @@ def plan_routes(
             ))
             continue
 
-        # Rule 3: Must intersect with the affected segment
+        # Rule 3: Must DIRECTLY intersect the affected segment.
+        # "Directly intersect" means one road appears in the other's
+        # intersections list. Sharing a third road is NOT an intersection:
+        # 敦化南路一段 and 光復南路 both cross 忠孝東路四段, yet they never
+        # meet each other, so 敦化南路 must not qualify here.
         alt_intersections = alt_seg.get("intersections", [])
-        # Check if they share an intersection point (road name appears in the other's intersections)
-        shared = set(alt_intersections) & set(intersections)
-        # Also check if the affected road name appears in alt's intersections, or vice versa
-        if affected_name in alt_intersections:
-            shared.add(affected_name)
-        if alt_name in intersections:
-            shared.add(alt_name)
+        crosses_affected = (
+            alt_name in intersections or affected_name in alt_intersections
+        )
 
-        if not shared:
+        if not crosses_affected:
             excluded.append(ExcludedRoute(
                 route=f"{alt_id} ({alt_name})",
-                reason="與事故路段無直接交叉路口"
+                reason=(
+                    f"與事故路段無直接交叉路口（未出現於 {affected_name} 之 "
+                    f"intersections，亦未將 {affected_name} 列為交叉路段）"
+                )
             ))
             continue
 
-        # Rule 4: Determine upstream/downstream
-        # intersections list is ordered upstream → downstream
-        # Find the earliest shared intersection in the affected road's intersection list
-        is_upstream = False
-        is_downstream = False
-        for shared_road in shared:
-            if shared_road in intersections:
-                idx = intersections.index(shared_road)
-                midpoint = len(intersections) / 2
-                if idx < midpoint:
-                    is_upstream = True
-                else:
-                    is_downstream = True
-            elif shared_road == affected_name:
-                # This alt road crosses the affected road itself
-                is_upstream = True
-
         saturation = saturation_map.get(alt_id, 0.5)
+
+        # Rule 4: Upstream or downstream of the accident.
+        # `intersections` is ordered upstream → downstream, so the crossing
+        # road's position in that list decides it.
+        if alt_name not in intersections:
+            # It crosses the affected road but the affected road's own list
+            # doesn't place it, so its position can't be verified.
+            # Conservatively list as secondary rather than assume upstream.
+            secondary_candidates.append((alt_id, alt_name, saturation))
+            continue
+
+        cross_idx = intersections.index(alt_name)
+
+        if accident_idx is not None:
+            # Crossings at or before the accident intersection are upstream.
+            is_upstream = cross_idx <= accident_idx
+        else:
+            # Accident point unknown — fall back to the midpoint heuristic.
+            is_upstream = cross_idx < len(intersections) / 2
 
         if is_upstream:
             primary_candidates.append((alt_id, alt_name, saturation))
-        if is_downstream and not is_upstream:
+        else:
             secondary_candidates.append((alt_id, alt_name, saturation))
 
     # Rule 5: Pick lowest saturation among primary candidates

@@ -55,22 +55,23 @@ export default function TrafficChart({ trafficData, currentTimestamp }: TrafficC
     };
   });
 
-  /** SOP 第 1 條 thresholds, drawn so the rule is visible not implied. */
+  /** SOP 第 1 條 門檻線（B 85%、A 95%），只畫虛線不標文字。 */
   const thresholdLines = {
     silent: true,
     symbol: 'none' as const,
     lineStyle: { type: 'dashed' as const, width: 1 },
-    label: { fontSize: 9, fontFamily: font.mono },
+    // 只留虛線，不標文字。兩條門檻只差 10%（繪圖區約 15px），
+    // 任何標籤都會擠在一起或壓到曲線；級別的意義改由
+    // tooltip 的 A/B 標記與地圖圖例承擔。
+    label: { show: false },
     data: [
       {
         yAxis: threshold.saturationB,
         lineStyle: { color: level.b, opacity: 0.5 },
-        label: { formatter: 'B 85%', color: level.b, position: 'insideEndTop' as const },
       },
       {
         yAxis: threshold.saturationA,
         lineStyle: { color: level.a, opacity: 0.55 },
-        label: { formatter: 'A 95%', color: level.a, position: 'insideEndTop' as const },
       },
     ],
   };
@@ -133,13 +134,18 @@ export default function TrafficChart({ trafficData, currentTimestamp }: TrafficC
       data: KEY_SEGMENTS.map((s) => s.name),
       textStyle: { color: chart.legendLabel, fontSize: 10 },
       inactiveColor: '#4E5057',
-      top: 0,
+      top: 2,
       itemWidth: 12,
       itemHeight: 2,
       itemGap: 10,
       icon: 'roundRect',
     },
-    grid: { left: 38, right: 12, top: 28, bottom: 26 },
+    /**
+     * top 要留兩行圖例的高度。五個路段名稱在半欄寬（約 370px）放不下
+     * 一行，ECharts 會自動換行，若只留一行的空間，第二行就會壓到
+     * 繪圖區與 A/B 級門檻標籤上。
+     */
+    grid: { left: 38, right: 12, top: 50, bottom: 26 },
     xAxis: {
       type: 'category' as const,
       data: clockLabels,
@@ -179,7 +185,8 @@ export default function TrafficChart({ trafficData, currentTimestamp }: TrafficC
   return (
     <ReactECharts
       option={option}
-      style={{ height: 190 }}
+      // 圖例改留兩行後，把高度一併加高，繪圖區才不會被壓扁。
+      style={{ height: 226 }}
       opts={{ renderer: 'canvas' }}
       notMerge
     />

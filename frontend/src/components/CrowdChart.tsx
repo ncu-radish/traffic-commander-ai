@@ -56,18 +56,12 @@ export default function CrowdChart({ crowdData, currentTimestamp }: CrowdChartPr
     };
   });
 
-  /** SOP 第 3 條 — BL17 headcount trigger. */
+  /** SOP 第 3 條 — BL17 人數門檻（25,000 人），只畫虛線不標文字。 */
   const thresholdLine = {
     silent: true,
     symbol: 'none' as const,
     lineStyle: { type: 'dashed' as const, width: 1, color: level.a, opacity: 0.5 },
-    label: {
-      formatter: 'SOP§3 25k',
-      color: level.a,
-      fontSize: 9,
-      fontFamily: font.mono,
-      position: 'insideEndTop' as const,
-    },
+    label: { show: false },
     data: [{ yAxis: threshold.crowdBL17 }],
   };
 
@@ -121,13 +115,17 @@ export default function CrowdChart({ crowdData, currentTimestamp }: CrowdChartPr
       data: KEY_STATIONS.map((s) => s.name),
       textStyle: { color: chart.legendLabel, fontSize: 10 },
       inactiveColor: '#4E5057',
-      top: 0,
+      top: 2,
       itemWidth: 12,
       itemHeight: 2,
       itemGap: 10,
       icon: 'roundRect',
     },
-    grid: { left: 38, right: 12, top: 28, bottom: 26 },
+    /**
+     * 與車流圖同一個理由：五個站點名稱會換到第二行，
+     * top 必須留兩行圖例的空間，否則會壓到繪圖區與 SOP§3 門檻標籤。
+     */
+    grid: { left: 38, right: 12, top: 50, bottom: 26 },
     xAxis: {
       type: 'category' as const,
       data: clockLabels,
@@ -164,7 +162,8 @@ export default function CrowdChart({ crowdData, currentTimestamp }: CrowdChartPr
   return (
     <ReactECharts
       option={option}
-      style={{ height: 190 }}
+      // 與車流圖等高，兩張卡片才會對齊。
+      style={{ height: 226 }}
       opts={{ renderer: 'canvas' }}
       notMerge
     />
