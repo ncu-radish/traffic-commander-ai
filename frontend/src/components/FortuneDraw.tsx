@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { TrafficSegment, CrowdDensity, RoadSegment } from '../types';
+import { API_BASE } from '../config/api';
 import './FortuneDraw.css';
-
-const API_BASE = 'http://localhost:8000/api';
 
 interface FortuneDrawProps {
   trafficData: TrafficSegment[];

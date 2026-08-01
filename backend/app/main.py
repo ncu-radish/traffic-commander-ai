@@ -12,7 +12,11 @@ app = FastAPI(
 # Enable CORS for frontend development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://d1flr6mh5dprf7.cloudfront.net",  # 生產前端 (S3 + CloudFront)
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
