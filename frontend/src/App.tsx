@@ -8,9 +8,12 @@ import ChatPanel from './components/ChatPanel';
 import AlertBannerComponent from './components/AlertBanner';
 import MetricsBar from './components/MetricsBar';
 import TimelineControl from './components/TimelineControl';
+import CommuteRoutePanel from './components/CommuteRoutePanel';
 import FortuneDraw from './components/FortuneDraw';
 import type { LiveIncident, AlertBanner, TrafficSegment, CrowdDensity, RoadSegment, AccidentHotspots } from './types';
 import { API_BASE } from './config/api';
+import { COMMUTE_ROUTES, COMMUTE_ORIGIN, COMMUTE_DESTINATION } from './data/commuteRoutes';
+import { assessCommuteRoutes } from './services/commuteRouteRisk';
 import './App.css';
 
 function App() {
@@ -31,6 +34,10 @@ function App() {
   const [focusedSegmentId, setFocusedSegmentId] = useState<string | null>(null);
   // Advisory column is a drawer below 1180px.
   const [advisoryOpen, setAdvisoryOpen] = useState(false);
+  // 上下學路線模擬：被選取的路線，null 代表三條全顯示。
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+  // 路線預設不顯示，按下地圖上的按鈕（或面板入口）才畫出來。
+  const [showCommuteRoutes, setShowCommuteRoutes] = useState(false);
 
   // 台北市開放資料：114年道路交通事故斑點圖，依路段比對後的統計。
   // 獨立 fetch、獨立失敗處理，缺這份資料不該讓整個 Dashboard 掛掉。
@@ -89,6 +96,16 @@ function App() {
   const currentCrowd = useMemo(
     () => crowdDensityData.filter((d) => d.timestamp === currentTimestamp),
     [crowdDensityData, currentTimestamp]
+  );
+
+  /**
+   * 上下學路線評估。輸入是「當下時間點的車流」與事故熱點，所以拖動
+   * 時間軸時三條路線的分級與推薦結果會即時重算。
+   * 家長方用同一份資料與同一個函式，兩邊地圖上的路線必然一致。
+   */
+  const commuteAssessments = useMemo(
+    () => assessCommuteRoutes(COMMUTE_ROUTES, currentTraffic, accidentHotspots),
+    [currentTraffic, accidentHotspots]
   );
 
   /**
@@ -248,6 +265,19 @@ function App() {
               </div>
             )}
 
+            {/* 上下學路線模擬。與家長方共用同一份路線資料與同一個評估
+                函式；家長方只在地圖上看路線，不放這塊比較面板。
+                面板自己有標頭，這裡不再另外加 rail-label。 */}
+            <CommuteRoutePanel
+              assessments={commuteAssessments}
+              origin={COMMUTE_ORIGIN}
+              destination={COMMUTE_DESTINATION}
+              selectedRouteId={selectedRouteId}
+              onSelectRoute={setSelectedRouteId}
+              visible={showCommuteRoutes}
+              onToggleVisible={() => setShowCommuteRoutes((v) => !v)}
+            />
+
             <div className="rail-label">
               即時指標
               <span className="rail-label__count">{currentTraffic.length} 路段</span>
@@ -282,6 +312,13 @@ function App() {
               activeIncidents={activeIncidents}
               selectedSegmentId={focusedSegmentId}
               onSelectSegment={handleSelectSegment}
+              commuteRoutes={commuteAssessments}
+              commuteOrigin={COMMUTE_ORIGIN}
+              commuteDestination={COMMUTE_DESTINATION}
+              selectedRouteId={selectedRouteId}
+              onSelectRoute={setSelectedRouteId}
+              commuteRoutesVisible={showCommuteRoutes}
+              onToggleCommuteRoutes={() => setShowCommuteRoutes((v) => !v)}
             />
           </div>
 

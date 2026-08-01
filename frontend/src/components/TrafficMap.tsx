@@ -1,7 +1,14 @@
 import { MapContainer, TileLayer, Polyline, Popup, CircleMarker, Marker, Tooltip, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import type { TrafficSegment, RoadSegment, LiveIncident, AccidentHotspots } from '../types';
-import { road, saturationColor, saturationWeight, threshold } from '../theme/tokens';
+import type {
+  TrafficSegment,
+  RoadSegment,
+  LiveIncident,
+  AccidentHotspots,
+  CommuteRouteAssessment,
+  CommuteWaypoint,
+} from '../types';
+import { road, level, saturationColor, saturationWeight, threshold } from '../theme/tokens';
 import './TrafficMap.css';
 
 /* ── Approximate geometry for Xinyi District segments ──────────── */
@@ -73,7 +80,35 @@ interface TrafficMapProps {
   onMapClick?: (nearestSegmentId: string, segmentName: string, lat: number, lng: number) => void;
   /** 使用者點選的實際座標點——用一個點標記畫出來，不是整條路，呼應「定位是一個點」。 */
   userPositionPoint?: [number, number] | null;
+  /**
+   * 上下學路線模擬：已依即時路況評估過的候選路線。
+   * 疊在路段圖層之上，不改變路段本身的上色邏輯。
+   */
+  commuteRoutes?: CommuteRouteAssessment[];
+  /** 起訖點標記，與 commuteRoutes 一起出現。 */
+  commuteOrigin?: CommuteWaypoint | null;
+  commuteDestination?: CommuteWaypoint | null;
+  /** 被選取的路線 id；有值時只有這條維持全不透明，其餘淡化。 */
+  selectedRouteId?: string | null;
+  onSelectRoute?: (routeId: string) => void;
+  /**
+   * 上下學路線的顯示開關。有提供 onToggleCommuteRoutes 時，地圖右上角
+   * 會出現切換按鈕 —— 按下才畫出三條路線與起訖點。
+   */
+  commuteRoutesVisible?: boolean;
+  onToggleCommuteRoutes?: () => void;
 }
+
+/**
+ * 路線顏色綁在路線身分（colorKey）而不是計算出的風險等級 ——
+ * 否則兩條路線風險相同時會共用同一色，就分不出是哪一條。
+ * 色值仍取自 theme/tokens，不在元件裡寫死 hex。
+ */
+const routeColor: Record<'a' | 'b' | 'ok', string> = {
+  a: level.a,
+  b: level.b,
+  ok: level.ok,
+};
 
 /** 依事故數決定熱點圈的半徑，數量越多圈越大，而非固定大小的裝飾用圖示。 */
 function hotspotRadius(total: number): number {
@@ -135,6 +170,13 @@ export default function TrafficMap({
   focusSegmentIds,
   onMapClick,
   userPositionPoint,
+  commuteRoutes = [],
+  commuteOrigin,
+  commuteDestination,
+  selectedRouteId,
+  onSelectRoute,
+  commuteRoutesVisible = false,
+  onToggleCommuteRoutes,
 }: TrafficMapProps) {
   const trafficLookup = new Map<string, TrafficSegment>();
   trafficData.forEach((t) => trafficLookup.set(t.segmentId, t));
@@ -343,6 +385,157 @@ export default function TrafficMap({
           );
         })}
 
+        {/* ── 上下學路線模擬 ───────────────────────────────────
+            疊在路段之上：底層先畫一條深色描邊讓路線在彩色路網上讀得出來，
+            上層才是依路線身分上色的主線。三條一律虛線，各自的虛線樣式
+            不同，所以就算色弱也分得出是哪一條；建議路線線最粗。
+            這一段完全是附加圖層，沒有改動上面路段的任何上色邏輯。 */}
+        {commuteRoutesVisible && commuteRoutes.map((assessment) => {
+          const { route, recommended } = assessment;
+          const isSelected = selectedRouteId === route.id;
+          const dimmed = Boolean(selectedRouteId) && !isSelected;
+          const color = routeColor[route.colorKey];
+
+          const weight = recommended ? 6 : 4;
+
+          return (
+            <div key={route.id}>
+              {/* 描邊：讓路線與底下的路段區分開。 */}
+              <Polyline
+                positions={route.path}
+                interactive={false}
+                pathOptions={{
+                  color: '#0E0E10',
+                  weight: weight + 4,
+                  opacity: dimmed ? 0.25 : 0.75,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }}
+              />
+              <Polyline
+                positions={route.path}
+                pathOptions={{
+                  color,
+                  weight: isSelected ? weight + 2 : weight,
+                  opacity: dimmed ? 0.3 : 1,
+                  dashArray: route.dashArray,
+                  lineCap: 'butt',
+                  lineJoin: 'round',
+                }}
+                eventHandlers={{
+                  click: () => onSelectRoute?.(route.id),
+                }}
+              >
+                <Popup className="map-popup-wrap">
+                  <div className="map-popup">
+                    <header className="map-popup__head">
+                      <span className="map-popup__name">{route.name}</span>
+                      {recommended && (
+                        <span className="map-popup__id">建議路線</span>
+                      )}
+                    </header>
+
+                    <p className="map-popup__desc">{route.summary}</p>
+
+                    <dl className="map-popup__grid">
+                      <dt>風險</dt>
+                      <dd style={{ color }}>
+                        {assessment.risk === 'HIGH'
+                          ? '高'
+                          : assessment.risk === 'MEDIUM'
+                            ? '中'
+                            : '低'}
+                        {assessment.level === 'A'
+                          ? ' · A 級癱瘓'
+                          : assessment.level === 'B'
+                            ? ' · B 級壅擠'
+                            : ''}
+                      </dd>
+
+                      {/* 路線 3 不在主辦方路網內，沒有飽和度與事故統計可談。 */}
+                      {assessment.totalSegments === 0 ? (
+                        <>
+                          <dt>壅塞</dt>
+                          <dd>完全暢通 · 未納入路網統計</dd>
+                          <dt>沿線事故</dt>
+                          <dd>無事故熱點紀錄</dd>
+                        </>
+                      ) : (
+                        <>
+                          <dt>最高飽和度</dt>
+                          <dd className="num">
+                            {(assessment.maxSaturation * 100).toFixed(0)}%
+                            {assessment.worstSegmentName
+                              ? ` · ${assessment.worstSegmentName}`
+                              : ''}
+                          </dd>
+
+                          {assessment.avgSpeed !== null && (
+                            <>
+                              <dt>平均車速</dt>
+                              <dd className="num">{assessment.avgSpeed} km/h</dd>
+                            </>
+                          )}
+
+                          <dt>沿線事故</dt>
+                          <dd className="num" style={{ color: assessment.accidentTotal > 0 ? road.blocked : undefined }}>
+                            {assessment.accidentTotal} 件 · 平均每路段{' '}
+                            {assessment.accidentIntensity.toFixed(0)} 件
+                          </dd>
+
+                          <dt>讀數涵蓋</dt>
+                          <dd className="num">
+                            {assessment.measuredSegments}/{assessment.totalSegments} 路段
+                          </dd>
+                        </>
+                      )}
+                    </dl>
+                  </div>
+                </Popup>
+              </Polyline>
+            </div>
+          );
+        })}
+
+        {/* 起訖點標記 */}
+        {commuteRoutesVisible && commuteOrigin && (
+          <CircleMarker
+            center={commuteOrigin.position}
+            radius={7}
+            pathOptions={{
+              color: '#0E0E10',
+              fillColor: '#E8E8EA',
+              fillOpacity: 1,
+              weight: 2,
+            }}
+          >
+            <Tooltip direction="left" offset={[-8, 0]} opacity={1} permanent>
+              <span>
+                {commuteOrigin.label} · {commuteOrigin.detail}
+              </span>
+            </Tooltip>
+          </CircleMarker>
+        )}
+
+        {commuteRoutesVisible && commuteDestination && (
+          <CircleMarker
+            center={commuteDestination.position}
+            radius={8}
+            pathOptions={{
+              color: '#0E0E10',
+              fillColor: level.ok,
+              fillOpacity: 1,
+              weight: 2,
+            }}
+          >
+            <Tooltip direction="right" offset={[8, 0]} opacity={1} permanent>
+              <span>
+                {commuteDestination.label} · {commuteDestination.detail}
+              </span>
+            </Tooltip>
+          </CircleMarker>
+        )}
+
         {/* ── Accident hotspots (data.taipei 114年事故斑點圖) ─── */}
         {accidentHotspots &&
           Object.entries(accidentHotspots.segments).map(([segId, hotspot]) => {
@@ -429,6 +622,23 @@ export default function TrafficMap({
         })}
       </MapContainer>
 
+      {/* ── 上下學路線開關 ───────────────────────────────────
+          按下才畫出三條模擬路線與起訖點，預設不顯示，
+          讓地圖平常維持單純的路況檢視。 */}
+      {onToggleCommuteRoutes && (
+        <button
+          className="map-route-toggle"
+          onClick={onToggleCommuteRoutes}
+          data-active={commuteRoutesVisible}
+          aria-pressed={commuteRoutesVisible}
+        >
+          <span className="map-route-toggle__icon" aria-hidden="true">
+            {commuteRoutesVisible ? '✕' : '⤳'}
+          </span>
+          {commuteRoutesVisible ? '隱藏上下學路線' : '模擬上下學路線'}
+        </button>
+      )}
+
       {/* ── Legend ───────────────────────────────────────────── */}
       <div className="map-legend">
         <div className="map-legend__group">
@@ -449,6 +659,25 @@ export default function TrafficMap({
               width={2}
               dashed
             />
+          </div>
+        )}
+
+        {commuteRoutesVisible && commuteRoutes.length > 0 && (
+          <div className="map-legend__group">
+            <span className="map-legend__title">上下學路線</span>
+            {commuteRoutes.map((assessment) => (
+              <LegendLine
+                key={assessment.route.id}
+                color={routeColor[assessment.route.colorKey]}
+                label={
+                  assessment.recommended
+                    ? `${assessment.route.shortName}（建議）`
+                    : assessment.route.shortName
+                }
+                width={assessment.recommended ? 4 : 3}
+                dashed
+              />
+            ))}
           </div>
         )}
 

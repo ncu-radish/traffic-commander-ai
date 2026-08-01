@@ -60,14 +60,20 @@
   transition: border-color var(--transition-normal), transform var(--transition-normal), box-shadow var(--transition-normal);
 }
 
+/* 兩張卡片 hover 都用同一條淺灰細邊框。原本一張是 accent 藍、一張是
+   苔綠，兩色會讓人以為「顏色代表角色的某種屬性」，其實只是 hover 回饋。
+   邊框維持 1px（一般螢幕上最細的實線），顏色用 --text-secondary
+   (#9A9CA3) 這個淺灰，比白色收斂，也仍明顯亮於未 hover 的 --line。 */
 .mode-select__card:hover {
-  border-color: var(--accent);
+  border-color: var(--text-secondary);
   transform: translateY(-3px);
   box-shadow: var(--shadow-lg);
 }
 
-.mode-select__card--user:hover {
-  border-color: var(--level-ok);
+/* 鍵盤操作也要看得到同樣的邊框，不然只有滑鼠使用者有回饋。 */
+.mode-select__card:focus-visible {
+  outline: none;
+  border-color: var(--text-secondary);
 }
 
 .mode-select__card-label {
