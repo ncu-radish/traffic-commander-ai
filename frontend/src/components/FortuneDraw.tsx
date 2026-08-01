@@ -2,11 +2,23 @@ import { useEffect, useMemo, useState } from 'react';
 import type { TrafficSegment, CrowdDensity, RoadSegment } from '../types';
 import './FortuneDraw.css';
 
+const API_BASE = 'http://localhost:8000/api';
+
 interface FortuneDrawProps {
   trafficData: TrafficSegment[];
   crowdData: CrowdDensity[];
   roadNetwork: RoadSegment[];
 }
+
+interface WeatherSnapshot {
+  description: string;
+  tempC: number;
+  windSpeed: number;
+  rain1h: number;
+  isSevere: boolean;
+}
+
+type WeatherState = { status: 'loading' } | { status: 'unavailable' } | { status: 'ready'; data: WeatherSnapshot };
 
 type FortuneTier = 'good' | 'fair' | 'bad';
 type Stage = 'drawing' | 'revealed' | 'interpreted';
@@ -100,6 +112,7 @@ export default function FortuneDraw({ trafficData, crowdData, roadNetwork }: For
   const [isOpen, setIsOpen] = useState(false);
   const [stage, setStage] = useState<Stage>('drawing');
   const [result, setResult] = useState<FortuneResult | null>(null);
+  const [weather, setWeather] = useState<WeatherState>({ status: 'loading' });
 
   const networkByName = useMemo(() => {
     const map = new Map<string, RoadSegment>();
@@ -151,6 +164,27 @@ export default function FortuneDraw({ trafficData, crowdData, roadNetwork }: For
     setStage('drawing');
     setIsOpen(true);
     window.setTimeout(() => setStage('revealed'), DRAW_ANIMATION_MS);
+
+    setWeather({ status: 'loading' });
+    fetch(`${API_BASE}/weather/current`)
+      .then((res) => {
+        if (!res.ok) throw new Error('weather unavailable');
+        return res.json();
+      })
+      .then((payload) => {
+        const w = payload.weather;
+        setWeather({
+          status: 'ready',
+          data: {
+            description: w?.weather?.[0]?.description ?? '未知',
+            tempC: w?.main?.temp ?? 0,
+            windSpeed: w?.wind?.speed ?? 0,
+            rain1h: w?.rain?.['1h'] ?? 0,
+            isSevere: Boolean(payload.is_severe),
+          },
+        });
+      })
+      .catch(() => setWeather({ status: 'unavailable' }));
   };
 
   const close = () => setIsOpen(false);
@@ -259,11 +293,44 @@ export default function FortuneDraw({ trafficData, crowdData, roadNetwork }: For
                 <section className="fortune-section">
                   <h4 className="fortune-section-title">
                     天氣狀況分析
-                    <span className="fortune-section-badge">資料源規劃中</span>
+                    {weather.status === 'unavailable' && (
+                      <span className="fortune-section-badge">暫時無法取得</span>
+                    )}
                   </h4>
-                  <p className="fortune-placeholder-note">
-                    尚未串接氣象資料（規劃接入 OpenWeather API），此區塊不顯示推測數值。
-                  </p>
+                  {weather.status === 'loading' && (
+                    <p className="fortune-placeholder-note">查詢即時天氣中…</p>
+                  )}
+                  {weather.status === 'unavailable' && (
+                    <p className="fortune-placeholder-note">
+                      OpenWeather API 目前無法連線（需設定有效金鑰），此區塊不顯示推測數值。
+                    </p>
+                  )}
+                  {weather.status === 'ready' && (
+                    <dl className="fortune-fact-grid">
+                      <div className="fortune-fact">
+                        <dt>天氣狀況</dt>
+                        <dd>{weather.data.description}</dd>
+                      </div>
+                      <div className="fortune-fact">
+                        <dt>氣溫</dt>
+                        <dd>{weather.data.tempC.toFixed(1)}°C</dd>
+                      </div>
+                      <div className="fortune-fact">
+                        <dt>風速</dt>
+                        <dd>{weather.data.windSpeed.toFixed(1)} m/s</dd>
+                      </div>
+                      <div className="fortune-fact">
+                        <dt>1小時降雨量</dt>
+                        <dd>{weather.data.rain1h.toFixed(1)} mm</dd>
+                      </div>
+                      {weather.data.isSevere && (
+                        <div className="fortune-fact fortune-fact--wide">
+                          <dt>提醒</dt>
+                          <dd>目前為劇烈天氣，行車風險上升</dd>
+                        </div>
+                      )}
+                    </dl>
+                  )}
                 </section>
 
                 <section className="fortune-section">
