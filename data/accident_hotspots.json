@@ -1,26 +1,27 @@
 {
-  "source": "data.taipei 114年臺北市道路交通事故斑點圖 (rid=d4aaaaa6-d03e-4539-945b-cdbd9387007d)",
-  "year": "114 (2025)",
-  "method": "以路段近似座標(TrafficMap.tsx segmentCoordinates)比對事故點，180公尺內視為屬於該路段，僅計入地址含「信義區」之事故點",
-  "matched_total": 491,
+  "source": "data.taipei 臺北市道路交通事故斑點圖 — 112~114年合併 (rid=ecacdff3-01b1-495a-bfe7-49933bb084de, c4db4188-c13b-45e5-b5bb-6054a95d6bea, d4aaaaa6-d03e-4539-945b-cdbd9387007d)",
+  "year": "114 (2025) / 113 (2024) / 112 (2023) 合併",
+  "method": "以路段近似座標(TrafficMap.tsx segmentCoordinates)比對事故點，180公尺內視為屬於該路段，僅計入地址含「信義區」之事故點；三年份資料合併計數",
+  "matched_total": 1454,
+  "raw_total_rows": 69402,
   "segments": {
     "RD_TPE_001": {
       "name": "忠孝東路四段",
       "a1_fatal": 0,
-      "a2_injury": 47,
-      "total": 47
+      "a2_injury": 122,
+      "total": 122
     },
     "RD_TPE_002": {
       "name": "光復南路",
-      "a1_fatal": 0,
-      "a2_injury": 29,
-      "total": 29
+      "a1_fatal": 1,
+      "a2_injury": 88,
+      "total": 89
     },
     "RD_TPE_003": {
       "name": "基隆路一段",
       "a1_fatal": 0,
-      "a2_injury": 100,
-      "total": 100
+      "a2_injury": 296,
+      "total": 296
     },
     "RD_TPE_004": {
       "name": "市民大道四段",
@@ -30,9 +31,9 @@
     },
     "RD_TPE_005": {
       "name": "仁愛路四段",
-      "a1_fatal": 0,
-      "a2_injury": 38,
-      "total": 38
+      "a1_fatal": 1,
+      "a2_injury": 117,
+      "total": 118
     },
     "RD_TPE_006": {
       "name": "敦化南路一段",
@@ -43,8 +44,8 @@
     "RD_TPE_007": {
       "name": "松高路",
       "a1_fatal": 0,
-      "a2_injury": 45,
-      "total": 45
+      "a2_injury": 154,
+      "total": 154
     },
     "RD_TPE_008": {
       "name": "延吉街",
@@ -55,20 +56,20 @@
     "RD_TPE_009": {
       "name": "基隆路地下道",
       "a1_fatal": 0,
-      "a2_injury": 82,
-      "total": 82
+      "a2_injury": 216,
+      "total": 216
     },
     "RD_TPE_010": {
       "name": "市府路",
       "a1_fatal": 0,
-      "a2_injury": 10,
-      "total": 10
+      "a2_injury": 33,
+      "total": 33
     },
     "RD_TPE_011": {
       "name": "松壽路",
       "a1_fatal": 0,
-      "a2_injury": 44,
-      "total": 44
+      "a2_injury": 132,
+      "total": 132
     },
     "RD_TPE_012": {
       "name": "敦化南路二段",
@@ -79,14 +80,14 @@
     "RD_TPE_013": {
       "name": "信義路五段",
       "a1_fatal": 0,
-      "a2_injury": 74,
-      "total": 74
+      "a2_injury": 234,
+      "total": 234
     },
     "RD_TPE_014": {
       "name": "松智路",
       "a1_fatal": 0,
-      "a2_injury": 22,
-      "total": 22
+      "a2_injury": 60,
+      "total": 60
     },
     "RD_TPE_015": {
       "name": "復興南路一段",
