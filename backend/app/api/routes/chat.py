@@ -73,6 +73,132 @@ def _extract_timestamp_from_message(message: str, available_timestamps: list) ->
     return None
 
 
+def _snapshot_at(df, ts: str):
+    """
+    Latest reading per segment at or before `ts`.
+
+    The traffic feed is sparse — most timestamps report only a handful of the
+    15 segments — so filtering on an exact timestamp would leave the rest of the
+    network looking unreported. Timestamps use a zero-padded
+    "YYYY-MM-DD HH:MM" format, so plain string comparison orders them correctly.
+    """
+    if df.empty or ts is None:
+        return df
+    subset = df[df["Timestamp"] <= ts]
+    if subset.empty:
+        return subset
+    return subset.sort_values("Timestamp").groupby("Segment_ID", as_index=False).tail(1)
+
+
+def _build_route_plan_context(
+    message: str,
+    road_network: list,
+    traffic_df,
+    incidents: list,
+    resolved_ts,
+) -> str:
+    """
+    Run the SOP Article 2 route selection algorithm and format the result.
+
+    The guideline requires route replanning to be a program computation with the
+    LLM only writing the guidance text, so the primary/secondary/excluded
+    decision is made here rather than left to the model's own reasoning.
+    """
+    from app.services.route_planner import plan_routes
+
+    by_id = {r["segment_id"]: r for r in road_network}
+
+    # Which segments need a plan: incidents that meet SOP Article 2, plus any
+    # road segment the operator named in the question.
+    targets: dict = {}  # segment_id -> incident location (or None)
+
+    for inc in incidents or []:
+        seg_id = inc.get("affected_segment", "")
+        if not seg_id.startswith("RD_") or seg_id not in by_id:
+            continue
+        if inc.get("status") in {"Closed", "Blocked", "Restricted"} and inc.get(
+            "severity"
+        ) in {"High", "Critical"}:
+            targets[seg_id] = inc.get("location")
+
+    for seg in road_network:
+        if seg["name"] in message or seg["segment_id"] in message:
+            if seg.get("alternatives"):
+                targets.setdefault(seg["segment_id"], None)
+
+    if not targets:
+        return ""
+
+    use_ts = resolved_ts if resolved_ts else (
+        traffic_df["Timestamp"].max() if not traffic_df.empty else None
+    )
+    # Use the as-of snapshot so every candidate has a real saturation value;
+    # an exact-timestamp filter would leave most of them missing and the
+    # "lowest saturation wins" tie-break would fall back to a default.
+    traffic_records = (
+        _snapshot_at(traffic_df, use_ts).to_dict("records")
+        if use_ts is not None and not traffic_df.empty
+        else []
+    )
+
+    sat_lookup = {
+        r["Segment_ID"]: float(r["Saturation_Score"]) for r in traffic_records
+    }
+
+    blocks = []
+    for seg_id, location in targets.items():
+        plan = plan_routes(
+            seg_id,
+            road_network,
+            traffic_records,
+            incident_location=location,
+        )
+
+        seg_name = by_id[seg_id]["name"]
+        lines = [
+            f"[系統計算之疏散路徑 — {seg_name} ({seg_id}) 封閉，依 SOP 第 2 條 a 項，"
+            f"飽和度基準 {use_ts}]"
+        ]
+        if location:
+            lines.append(f"  事故位置：{location}")
+
+        if plan.primary_route:
+            primary_sat = sat_lookup.get(plan.primary_route)
+            sat_text = f"，飽和度 {primary_sat:.2f}" if primary_sat is not None else ""
+            lines.append(
+                f"  主疏散：{plan.primary_route_name} ({plan.primary_route}){sat_text}"
+            )
+            # SOP Article 2a: a congested primary route is still kept, but the
+            # report must flag the congestion and recommend transit in parallel.
+            if primary_sat is not None and primary_sat >= 0.85:
+                lines.append(
+                    f"    註：主疏散路段已壅塞（{primary_sat:.2f} >= 0.85），依 SOP 第 2 條 a 項"
+                    f"仍維持該路徑並啟動長綠燈時制，報告須註明壅塞並建議併行大眾運輸。"
+                )
+        else:
+            lines.append(
+                "  主疏散：無符合條件之路段（該路段之 alternatives 均未通過 SOP 第 2 條 a 項"
+                "三項篩選，詳見下方排除理由；此為資料本身之結果，非計算失敗）"
+            )
+
+        if plan.secondary_routes:
+            lines.append(f"  次要疏散（相交路口位於下游）：{', '.join(plan.secondary_routes)}")
+
+        if plan.excluded_routes:
+            lines.append("  排除路段：")
+            for ex in plan.excluded_routes:
+                lines.append(f"    - {ex.route}：{ex.reason}")
+
+        if plan.signal_adjustments:
+            lines.append("  號誌調整：")
+            for sig in plan.signal_adjustments:
+                lines.append(f"    - {sig.road}：{sig.adjustment}（{sig.period}）")
+
+        blocks.append("\n".join(lines))
+
+    return "\n\n".join(blocks)
+
+
 def _build_realtime_context(message: str) -> str:
     """
     Build a concise summary of traffic/crowd data relevant to the question.
@@ -96,61 +222,34 @@ def _build_realtime_context(message: str) -> str:
             latest_ts = traffic_df["Timestamp"].max()
             resolved_ts = target_ts if target_ts else latest_ts
 
-            if target_ts:
-                # User asked about a specific time — show that timestamp's data
-                ts_data = traffic_df[traffic_df["Timestamp"] == target_ts]
-                high_sat = ts_data[ts_data["Saturation_Score"] >= 0.80].sort_values(
-                    "Saturation_Score", ascending=False
-                )
-                if not high_sat.empty:
-                    lines = [f"[車流數據 - {target_ts}] 飽和度 >= 80% 路段："]
-                    for _, row in high_sat.iterrows():
-                        sat = row["Saturation_Score"]
-                        level = "A 級 (癱瘓)" if sat >= 0.95 else "B 級 (壅擠)"
-                        lines.append(
-                            f"  - {row['Road_Name']} ({row['Segment_ID']}): "
-                            f"飽和度 {sat:.2f} [{level}], "
-                            f"車速 {row['Avg_Speed']:.0f} km/h, "
-                            f"車輛數 {int(row['Vehicle_Count'])}, "
-                            f"狀態 {row['Lane_Status']}"
-                        )
-                    parts.append("\n".join(lines))
-                else:
-                    parts.append(f"[車流數據 - {target_ts}] 所有路段飽和度正常 (< 0.80)")
+            # The feed is sparse: a given timestamp usually carries only a few
+            # segments. Reading a single timestamp would report most of the
+            # network as missing, so take each segment's latest reading at or
+            # before the reference time instead.
+            snapshot = _snapshot_at(traffic_df, resolved_ts)
+            label = "車流狀態" if target_ts else "即時車流狀態"
 
-                # Also show latest for comparison if different
-                if target_ts != latest_ts:
-                    latest_data = traffic_df[traffic_df["Timestamp"] == latest_ts]
-                    latest_high = latest_data[latest_data["Saturation_Score"] >= 0.80]
-                    if not latest_high.empty:
-                        lines = [f"[最新車流數據 - {latest_ts}] 飽和度 >= 80% 路段："]
-                        for _, row in latest_high.sort_values("Saturation_Score", ascending=False).iterrows():
-                            lines.append(
-                                f"  - {row['Road_Name']} ({row['Segment_ID']}): 飽和度 {row['Saturation_Score']:.2f}"
-                            )
-                        parts.append("\n".join(lines))
-                    else:
-                        parts.append(f"[最新車流數據 - {latest_ts}] 所有路段飽和度已恢復正常")
+            high_sat = snapshot[snapshot["Saturation_Score"] >= 0.80].sort_values(
+                "Saturation_Score", ascending=False
+            )
+            if not high_sat.empty:
+                lines = [f"[{label} - 基準 {resolved_ts}] 飽和度 >= 80% 路段："]
+                for _, row in high_sat.iterrows():
+                    sat = row["Saturation_Score"]
+                    level = "A 級 (癱瘓)" if sat >= 0.95 else "B 級 (壅擠)"
+                    stale = "" if row["Timestamp"] == resolved_ts else f"，數據時間 {row['Timestamp']}"
+                    lines.append(
+                        f"  - {row['Road_Name']} ({row['Segment_ID']}): "
+                        f"飽和度 {sat:.2f} [{level}], "
+                        f"車速 {row['Avg_Speed']:.0f} km/h, "
+                        f"車輛數 {int(row['Vehicle_Count'])}, "
+                        f"狀態 {row['Lane_Status']}{stale}"
+                    )
+                parts.append("\n".join(lines))
             else:
-                # No specific time mentioned — show latest
-                latest = traffic_df[traffic_df["Timestamp"] == latest_ts]
-                high_sat = latest[latest["Saturation_Score"] >= 0.80].sort_values(
-                    "Saturation_Score", ascending=False
+                parts.append(
+                    f"[{label} - 基準 {resolved_ts}] 已回報之路段飽和度均 < 0.80"
                 )
-                if not high_sat.empty:
-                    lines = [f"[即時車流數據 - {latest_ts}] 飽和度 >= 80% 路段："]
-                    for _, row in high_sat.iterrows():
-                        sat = row["Saturation_Score"]
-                        level = "A 級 (癱瘓)" if sat >= 0.95 else "B 級 (壅擠)"
-                        lines.append(
-                            f"  - {row['Road_Name']} ({row['Segment_ID']}): "
-                            f"飽和度 {sat:.2f} [{level}], "
-                            f"車速 {row['Avg_Speed']:.0f} km/h, "
-                            f"車輛數 {int(row['Vehicle_Count'])}"
-                        )
-                    parts.append("\n".join(lines))
-                else:
-                    parts.append(f"[即時車流數據 - {latest_ts}] 所有路段飽和度正常 (< 0.80)")
 
         # Get crowd data
         crowd_df = repository.get_crowd_density_df()
@@ -249,19 +348,27 @@ def _build_realtime_context(message: str) -> str:
             # Add saturation data for alternative segments (for route planning)
             if relevant_ids and not traffic_df.empty:
                 use_ts = resolved_ts if resolved_ts else traffic_df["Timestamp"].max()
-                alt_traffic = traffic_df[
-                    (traffic_df["Timestamp"] == use_ts) &
-                    (traffic_df["Segment_ID"].isin(relevant_ids))
-                ]
+                alt_snapshot = _snapshot_at(traffic_df, use_ts)
+                alt_traffic = alt_snapshot[alt_snapshot["Segment_ID"].isin(relevant_ids)]
                 if not alt_traffic.empty:
-                    lines = [f"[替代路段飽和度 - {use_ts}]"]
+                    lines = [f"[替代路段飽和度 - 基準 {use_ts}]"]
                     for _, row in alt_traffic.sort_values("Saturation_Score", ascending=False).iterrows():
+                        stale = "" if row["Timestamp"] == use_ts else f"（數據時間 {row['Timestamp']}）"
                         lines.append(
                             f"  - {row['Road_Name']} ({row['Segment_ID']}): "
                             f"飽和度 {row['Saturation_Score']:.2f}, "
-                            f"車速 {row['Avg_Speed']:.0f} km/h"
+                            f"車速 {row['Avg_Speed']:.0f} km/h{stale}"
                         )
                     parts.append("\n".join(lines))
+
+            # Route replanning is a deterministic computation, not an LLM
+            # judgement call. Run the SOP Article 2 algorithm here and hand the
+            # LLM the finished result so it only has to explain it.
+            plan_ctx = _build_route_plan_context(
+                message, road_network, traffic_df, incidents, resolved_ts
+            )
+            if plan_ctx:
+                parts.append(plan_ctx)
 
         return "\n\n".join(parts) if parts else ""
     except Exception as e:
