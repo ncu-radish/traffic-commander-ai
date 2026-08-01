@@ -169,6 +169,7 @@ export default function FortuneDraw({ trafficData, crowdData, roadNetwork }: For
             onClick={(e) => e.stopPropagation()}
           >
             <button className="fortune-dismiss" onClick={close} aria-label="關閉">✕</button>
+            <div className="fortune-band" aria-hidden="true" />
 
             {stage === 'drawing' && (
               <div className="fortune-stage fortune-stage--drawing">
@@ -306,6 +307,7 @@ export default function FortuneDraw({ trafficData, crowdData, roadNetwork }: For
                   </ul>
                 </section>
 
+                <div className="fortune-band fortune-band--bottom" aria-hidden="true" />
                 <button className="fortune-close" onClick={() => setStage('revealed')}>返回籤面</button>
               </div>
             )}
