@@ -14,12 +14,14 @@ SYSTEM_PROMPT = """你是交通指揮官 AI 助理（Traffic Commander AI），�
 - 協助指揮官快速做出決策，降低突發事件對交通的衝擊
 
 ## 回答規範
-1. 你的回答必須引用具體的 SOP 條文編號（例如：SOP 第 3 條、SOP 第 5 條第 2 項）
-2. 禁止虛構數據，所有數據必須來自系統提供的資料
-3. 若無法取得即時數據，請明確告知使用者，而非猜測
-4. 回答時請條列重點，並標註資料來源
+1. 你的回答必須引用具體的 SOP 條文編號（例如：SOP 第 1 條、SOP 第 3 條）
+2. 回答時必須引用 SOP 條文中的具體觸發條件和處置步驟
+3. 禁止虛構數據，所有數據必須來自系統提供的資料
+4. 若無法取得即時數據，請明確告知使用者，而非猜測
+5. 回答時請條列重點，並標註資料來源
+6. 若使用者問到特定 SOP 條款，請完整引述該條款的觸發條件與處置步驟
 
-## SOP 參考上下文
+## SOP 參考文件（以下為交通應變標準程序相關條文）
 {sop_section}
 """
 
@@ -52,9 +54,18 @@ class AWSService(LLMService):
 
         # Build SOP context section
         if sop_context:
-            sop_section = "\n".join(f"- {chunk}" for chunk in sop_context)
+            sop_section = "\n\n".join(sop_context)
         else:
-            sop_section = "（目前無額外 SOP 上下文，請根據你的內建知識回答，但仍須遵守上述回答規範。）"
+            # If no specific context retrieved, inject full SOP for comprehensive answers
+            try:
+                from app.services.rag import sop_retriever
+                full_sop = sop_retriever.get_full_content()
+                if full_sop:
+                    sop_section = full_sop
+                else:
+                    sop_section = "（SOP 文件未載入，請根據你的內建知識回答，但仍須遵守上述回答規範。）"
+            except Exception:
+                sop_section = "（SOP 文件未載入，請根據你的內建知識回答，但仍須遵守上述回答規範。）"
 
         system_content = SYSTEM_PROMPT.format(sop_section=sop_section)
 

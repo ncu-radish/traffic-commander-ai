@@ -22,7 +22,11 @@ def chat_with_agent(
     sop_context = []
     try:
         from app.services.rag import sop_retriever
-        sop_context = sop_retriever.query(request.message, top_k=3)
+        sop_context = sop_retriever.query(request.message, top_k=5)
+
+        # If query returned nothing useful, provide all chunks for comprehensive coverage
+        if not sop_context:
+            sop_context = sop_retriever.get_all_chunks()
     except Exception:
         pass  # Gracefully degrade if RAG is not available
 
