@@ -61,6 +61,8 @@ interface TrafficMapProps {
   secondaryRouteIds?: string[];
   /** data.taipei 114年事故斑點圖，依路段比對後的統計。缺資料時該圖層直接不畫。 */
   accidentHotspots?: AccidentHotspots | null;
+  /** 使用者導航模擬（RoutePlanner）算出的多跳路徑，與 primary/secondary（SOP2單跳）分開畫。 */
+  routePathIds?: string[];
 }
 
 /** 依事故數決定熱點圈的半徑，數量越多圈越大，而非固定大小的裝飾用圖示。 */
@@ -81,12 +83,14 @@ export default function TrafficMap({
   primaryRouteId,
   secondaryRouteIds = [],
   accidentHotspots,
+  routePathIds = [],
 }: TrafficMapProps) {
   const trafficLookup = new Map<string, TrafficSegment>();
   trafficData.forEach((t) => trafficLookup.set(t.segmentId, t));
 
   const affectedSegmentIds = new Set(activeIncidents.map((i) => i.affectedSegment));
   const secondarySet = new Set(secondaryRouteIds);
+  const routePathSet = new Set(routePathIds);
 
   const hasRoutePlan = Boolean(primaryRouteId) || secondaryRouteIds.length > 0;
 
@@ -120,6 +124,7 @@ export default function TrafficMap({
           const isSelected = selectedSegmentId === segment.segmentId;
           const isPrimary = primaryRouteId === segment.segmentId;
           const isSecondary = secondarySet.has(segment.segmentId);
+          const isOnUserRoute = routePathSet.has(segment.segmentId);
 
           // No reading for this timestamp: draw as inert geometry
           // rather than implying a measured value.
@@ -135,6 +140,13 @@ export default function TrafficMap({
             color = saturationColor(saturation);
             weight = saturationWeight(saturation);
             opacity = 0.9;
+          }
+
+          if (isOnUserRoute) {
+            color = road.primaryRoute;
+            weight = 5;
+            dashArray = '2 5';
+            opacity = 1;
           }
 
           if (isPrimary) {

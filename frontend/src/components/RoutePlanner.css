@@ -1,0 +1,110 @@
+.route-planner__note {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: var(--leading);
+}
+
+.route-planner__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.route-planner__row label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.route-planner__row select {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--text-sm);
+}
+
+.route-planner__btn {
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.route-planner__btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.route-planner__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.route-planner__btn--accent {
+  background: var(--level-a-soft);
+  border-color: var(--level-a-line);
+  color: var(--level-a);
+}
+
+.route-planner__error {
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--level-a);
+}
+
+.route-planner__result {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line-faint);
+}
+
+.route-planner__path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+
+.route-planner__stop {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.route-planner__arrow {
+  color: var(--text-disabled);
+  font-weight: 400;
+}
+
+.route-planner__cost {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.route-planner__change-alert {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--level-a-soft);
+  border: 1px solid var(--level-a-line);
+}
+.route-planner__change-alert p {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
