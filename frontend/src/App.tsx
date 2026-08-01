@@ -10,9 +10,8 @@ import MetricsBar from './components/MetricsBar';
 import TimelineControl from './components/TimelineControl';
 import FortuneDraw from './components/FortuneDraw';
 import type { LiveIncident, AlertBanner, TrafficSegment, CrowdDensity, RoadSegment, AccidentHotspots } from './types';
+import { API_BASE } from './config/api';
 import './App.css';
-
-const API_BASE = 'http://localhost:8000/api';
 
 function App() {
   const [trafficFlowData, setTrafficFlowData] = useState<TrafficSegment[]>([]);

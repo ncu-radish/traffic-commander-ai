@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { RoadSegment, LiveIncident, CrowdDensity } from '../types';
+import { API_BASE } from '../config/api';
 import './RoutePlanner.css';
-
-const API_BASE = 'http://localhost:8000/api';
 
 interface RouteResult {
   path: string[];

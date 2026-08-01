@@ -1,0 +1,70 @@
+name: Deploy Backend to AWS EC2
+
+on:
+  push:
+    branches:
+      - main  # 僅在推送到 main 時執行
+    paths:
+      - 'backend/**'  # 僅在 backend 目錄有異動時才發動部署
+      - '.github/workflows/backend-deploy.yml'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    # 自動取得 GitHub Actions 執行的 Runner IP，並動態加入 EC2 安全群組 (確保 SSH 通暢)
+    - name: Get GitHub Actions IP
+      id: ip
+      run: echo "IPV4=$(curl -s https://api.ipify.org)" >> $GITHUB_OUTPUT
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-west-2  # 務必確認是您 EC2 所在的 Region
+
+    - name: Temporarily Add Runner IP to EC2 Security Group
+      run: |
+        aws ec2 authorize-security-group-ingress \
+          --group-id ${{ secrets.EC2_SG_ID }} \
+          --protocol tcp \
+          --port 22 \
+          --cidr ${{ steps.ip.outputs.IPV4 }}/32 || true
+      # 註：secrets.EC2_SG_ID 請在大會 Secrets 設定 SG-EC2 的 ID (例：sg-0123456789)
+
+    # 遠端 SSH 連線至 EC2 執行更新與重啟
+    - name: Deploy to EC2 via SSH
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          cd ~/traffic-commander-ai
+          git pull origin main
+          
+          # 進入後端目錄更新套件 (若 requirements.txt 有變動)
+          cd backend
+          source .venv/bin/activate
+          pip install -r requirements.txt
+          
+          # 重啟 systemd 後端服務
+          sudo systemctl restart traffic-commander.service
+          
+          # 檢查服務是否正常運作
+          sudo systemctl status traffic-commander.service --no-pager
+
+    # 部署完畢後，安全地將 Runner IP 從 Security Group 中移除
+    - name: Remove Runner IP from Security Group
+      if: always()
+      run: |
+        aws ec2 revoke-security-group-ingress \
+          --group-id ${{ secrets.EC2_SG_ID }} \
+          --protocol tcp \
+          --port 22 \
+          --cidr ${{ steps.ip.outputs.IPV4 }}/32 || true

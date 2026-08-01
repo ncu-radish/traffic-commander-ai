@@ -4,9 +4,8 @@ import IncidentPanel from './components/IncidentPanel';
 import RoutePlanner from './components/RoutePlanner';
 import FortuneDraw from './components/FortuneDraw';
 import type { LiveIncident, TrafficSegment, RoadSegment, CrowdDensity, AccidentHotspots } from './types';
+import { API_BASE } from './config/api';
 import './UserView.css';
-
-const API_BASE = 'http://localhost:8000/api';
 
 interface UserViewProps {
   onBack: () => void;
