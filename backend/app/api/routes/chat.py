@@ -84,6 +84,7 @@ def _build_realtime_context(message: str) -> str:
         import pandas as pd
 
         parts = []
+        resolved_ts = None  # Will hold the timestamp we resolved for traffic data
 
         # Get traffic data
         traffic_df = repository.get_traffic_flow_df()
@@ -93,6 +94,7 @@ def _build_realtime_context(message: str) -> str:
             # Determine which timestamp to focus on
             target_ts = _extract_timestamp_from_message(message, all_timestamps)
             latest_ts = traffic_df["Timestamp"].max()
+            resolved_ts = target_ts if target_ts else latest_ts
 
             if target_ts:
                 # User asked about a specific time — show that timestamp's data
@@ -194,6 +196,72 @@ def _build_realtime_context(message: str) -> str:
                     f"[status={inc.get('status')}, type={inc.get('type')}]"
                 )
             parts.append("\n".join(lines))
+
+        # Get road network data — inject structure for affected segments and related roads
+        road_network = repository.get_road_network_raw()
+        if road_network:
+            # Build a lookup by segment_id and by name
+            by_id = {r["segment_id"]: r for r in road_network}
+            by_name = {r["name"]: r for r in road_network}
+
+            # Determine which segments are relevant to the question
+            relevant_ids: set = set()
+
+            # Add incident-affected segments
+            if incidents:
+                for inc in incidents:
+                    seg_id = inc.get("affected_segment", "")
+                    if seg_id and seg_id in by_id:
+                        relevant_ids.add(seg_id)
+
+            # Add segments mentioned in the user message
+            for seg in road_network:
+                if seg["name"] in message or seg["segment_id"] in message:
+                    relevant_ids.add(seg["segment_id"])
+
+            # Also add alternatives of relevant segments
+            alt_ids: set = set()
+            for seg_id in relevant_ids:
+                seg_data = by_id.get(seg_id, {})
+                for alt_id in seg_data.get("alternatives", []):
+                    alt_ids.add(alt_id)
+            relevant_ids.update(alt_ids)
+
+            # If no specific segments detected, include all (it's only ~15 entries)
+            if not relevant_ids:
+                relevant_ids = set(by_id.keys())
+
+            # Format road network data
+            lines = ["[路網結構資料]"]
+            for seg_id in sorted(relevant_ids):
+                seg = by_id.get(seg_id)
+                if not seg:
+                    continue
+                lines.append(
+                    f"  - {seg['name']} ({seg['segment_id']}): "
+                    f"capacity={seg['capacity_vph']} vph, "
+                    f"flow_direction={seg['flow_direction']}, "
+                    f"intersections={seg['intersections']}, "
+                    f"alternatives={seg['alternatives']}"
+                )
+            parts.append("\n".join(lines))
+
+            # Add saturation data for alternative segments (for route planning)
+            if relevant_ids and not traffic_df.empty:
+                use_ts = resolved_ts if resolved_ts else traffic_df["Timestamp"].max()
+                alt_traffic = traffic_df[
+                    (traffic_df["Timestamp"] == use_ts) &
+                    (traffic_df["Segment_ID"].isin(relevant_ids))
+                ]
+                if not alt_traffic.empty:
+                    lines = [f"[替代路段飽和度 - {use_ts}]"]
+                    for _, row in alt_traffic.sort_values("Saturation_Score", ascending=False).iterrows():
+                        lines.append(
+                            f"  - {row['Road_Name']} ({row['Segment_ID']}): "
+                            f"飽和度 {row['Saturation_Score']:.2f}, "
+                            f"車速 {row['Avg_Speed']:.0f} km/h"
+                        )
+                    parts.append("\n".join(lines))
 
         return "\n\n".join(parts) if parts else ""
     except Exception as e:
