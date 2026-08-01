@@ -8,9 +8,11 @@
   align-items: center;
   gap: var(--space-2);
   position: fixed;
-  right: var(--space-6);
+  right: var(--fortune-trigger-right, var(--space-6));
   bottom: var(--space-6);
-  z-index: var(--z-overlay);
+  /* 蓋過Leaflet地圖自己的內部圖層堆疊（tile/overlay/marker/popup pane最高到約700），
+     不能只靠 --z-overlay(10) 這種給一般面板用的小數字。 */
+  z-index: 2000;
   padding: var(--space-3) var(--space-5);
   border-radius: var(--radius-pill);
   border: 1px solid var(--line);
@@ -44,7 +46,7 @@
 .fortune-overlay {
   position: fixed;
   inset: 0;
-  z-index: var(--z-modal);
+  z-index: 2001;
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -389,9 +391,11 @@
   border: 1px solid;
   background: rgba(255, 255, 255, 0.5);
 }
-.fortune-tag--good { color: #1f8a4c; border-color: rgba(31, 138, 76, 0.4); }
-.fortune-tag--fair { color: #b3760f; border-color: rgba(179, 118, 15, 0.4); }
-.fortune-tag--bad  { color: #c0392b; border-color: rgba(192, 57, 43, 0.4); }
+.fortune-tag--excellent { color: #1f8a4c; border-color: rgba(31, 138, 76, 0.4); }
+.fortune-tag--good      { color: #2f8f6f; border-color: rgba(47, 143, 111, 0.4); }
+.fortune-tag--neutral   { color: #b3760f; border-color: rgba(179, 118, 15, 0.4); }
+.fortune-tag--caution   { color: #c2660f; border-color: rgba(194, 102, 15, 0.45); }
+.fortune-tag--severe    { color: #c0392b; border-color: rgba(192, 57, 43, 0.4); }
 
 .fortune-score-row {
   display: flex;

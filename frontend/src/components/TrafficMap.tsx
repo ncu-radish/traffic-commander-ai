@@ -1,6 +1,6 @@
-import { MapContainer, TileLayer, Polyline, Popup, CircleMarker, Marker, Tooltip } from 'react-leaflet';
+import { MapContainer, TileLayer, Polyline, Popup, CircleMarker, Marker, Tooltip, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import type { TrafficSegment, RoadSegment, LiveIncident } from '../types';
+import type { TrafficSegment, RoadSegment, LiveIncident, AccidentHotspots } from '../types';
 import { road, saturationColor, saturationWeight, threshold } from '../theme/tokens';
 import './TrafficMap.css';
 
@@ -59,6 +59,67 @@ interface TrafficMapProps {
   primaryRouteId?: string | null;
   /** Secondary diversion routes. */
   secondaryRouteIds?: string[];
+  /** data.taipei 114年事故斑點圖，依路段比對後的統計。缺資料時該圖層直接不畫。 */
+  accidentHotspots?: AccidentHotspots | null;
+  /** 使用者導航模擬（RoutePlanner）算出的多跳路徑，與 primary/secondary（SOP2單跳）分開畫。 */
+  routePathIds?: string[];
+  /**
+   * 有值時只保留這些路段（含事故熱點）的完整顯示，其餘路段淡出——
+   * 選好路線後聚焦在跟這趟行程有關的路況，不用整張圖的雜訊。
+   * 沒有值（尚未規劃路線）時維持顯示全部15條路段。
+   */
+  focusSegmentIds?: string[];
+  /** 開啟「點地圖設定位置」模式時才會監聽地圖點擊；回傳離點擊處最近的路段當定位依據。 */
+  onMapClick?: (nearestSegmentId: string, segmentName: string, lat: number, lng: number) => void;
+  /** 使用者點選的實際座標點——用一個點標記畫出來，不是整條路，呼應「定位是一個點」。 */
+  userPositionPoint?: [number, number] | null;
+}
+
+/** 依事故數決定熱點圈的半徑，數量越多圈越大，而非固定大小的裝飾用圖示。 */
+function hotspotRadius(total: number): number {
+  return 5 + Math.min(14, Math.sqrt(total) * 2.2);
+}
+
+function segmentMidpoint(coords: [number, number][]): [number, number] {
+  return coords[Math.floor(coords.length / 2)];
+}
+
+/** 點到線段的最短距離（近似平面幾何，範圍小，直接用經緯度差當座標夠用）。 */
+function pointToSegmentDist(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  if (dx === 0 && dy === 0) return Math.hypot(px - ax, py - ay);
+  let t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy);
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+/** 點擊地圖上任一點，找出離它最近的路段——「定位」用這條路段當路網圖的起點。 */
+function nearestSegmentToPoint(lat: number, lng: number): { segmentId: string; distance: number } | null {
+  let best: { segmentId: string; distance: number } | null = null;
+  for (const [segmentId, coords] of Object.entries(segmentCoordinates)) {
+    for (let i = 0; i < coords.length - 1; i++) {
+      const [ay, ax] = coords[i];
+      const [by, bx] = coords[i + 1];
+      const d = pointToSegmentDist(lng, lat, ax, ay, bx, by);
+      if (!best || d < best.distance) best = { segmentId, distance: d };
+    }
+  }
+  return best;
+}
+
+interface MapClickCaptureProps {
+  onPick: (lat: number, lng: number) => void;
+}
+
+/** 純粹的事件監聽元件，本身不畫任何東西——react-leaflet 的 useMapEvents 只能在 MapContainer 內部使用。 */
+function MapClickCapture({ onPick }: MapClickCaptureProps) {
+  useMapEvents({
+    click(e) {
+      onPick(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
 }
 
 export default function TrafficMap({
@@ -69,12 +130,27 @@ export default function TrafficMap({
   onSelectSegment,
   primaryRouteId,
   secondaryRouteIds = [],
+  accidentHotspots,
+  routePathIds = [],
+  focusSegmentIds,
+  onMapClick,
+  userPositionPoint,
 }: TrafficMapProps) {
   const trafficLookup = new Map<string, TrafficSegment>();
   trafficData.forEach((t) => trafficLookup.set(t.segmentId, t));
 
+  const handleMapClick = (lat: number, lng: number) => {
+    const nearest = nearestSegmentToPoint(lat, lng);
+    if (!nearest) return;
+    const seg = roadNetwork.find((s) => s.segmentId === nearest.segmentId);
+    onMapClick?.(nearest.segmentId, seg?.name ?? nearest.segmentId, lat, lng);
+  };
+
   const affectedSegmentIds = new Set(activeIncidents.map((i) => i.affectedSegment));
+  const hasFocus = Boolean(focusSegmentIds && focusSegmentIds.length > 0);
+  const focusSet = new Set(focusSegmentIds ?? []);
   const secondarySet = new Set(secondaryRouteIds);
+  const routePathSet = new Set(routePathIds);
 
   const hasRoutePlan = Boolean(primaryRouteId) || secondaryRouteIds.length > 0;
 
@@ -98,6 +174,20 @@ export default function TrafficMap({
           url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png"
         />
 
+        {onMapClick && <MapClickCapture onPick={handleMapClick} />}
+
+        {userPositionPoint && (
+          <CircleMarker
+            center={userPositionPoint}
+            radius={7}
+            pathOptions={{ color: '#fff', fillColor: road.primaryRoute, fillOpacity: 1, weight: 2 }}
+          >
+            <Tooltip direction="top" offset={[0, -8]} opacity={1} permanent>
+              <span>您的位置</span>
+            </Tooltip>
+          </CircleMarker>
+        )}
+
         {/* ── Road segments ──────────────────────────────────── */}
         {roadNetwork.map((segment) => {
           const coords = segmentCoordinates[segment.segmentId];
@@ -108,6 +198,7 @@ export default function TrafficMap({
           const isSelected = selectedSegmentId === segment.segmentId;
           const isPrimary = primaryRouteId === segment.segmentId;
           const isSecondary = secondarySet.has(segment.segmentId);
+          const isOnUserRoute = routePathSet.has(segment.segmentId);
 
           // No reading for this timestamp: draw as inert geometry
           // rather than implying a measured value.
@@ -123,6 +214,13 @@ export default function TrafficMap({
             color = saturationColor(saturation);
             weight = saturationWeight(saturation);
             opacity = 0.9;
+          }
+
+          if (isOnUserRoute) {
+            color = road.primaryRoute;
+            weight = 5;
+            dashArray = '2 5';
+            opacity = 1;
           }
 
           if (isPrimary) {
@@ -141,6 +239,14 @@ export default function TrafficMap({
             weight = 6;
             dashArray = '3 7';
             opacity = 1;
+          }
+
+          // 路線規劃完成後，只留下跟這趟行程有關的路段（路線本身、事故、SOP2疏散建議），
+          // 其餘路段淡出但不完全消失，仍看得出路網骨架。
+          const isRelevantToFocus = isOnUserRoute || isAffected || isPrimary || isSecondary || focusSet.has(segment.segmentId);
+          if (hasFocus && !isRelevantToFocus) {
+            opacity = 0.08;
+            weight = Math.min(weight, 1.5);
           }
 
           return (
@@ -199,7 +305,20 @@ export default function TrafficMap({
                         <dt>狀態</dt>
                         <dd>{traffic.laneStatus}</dd>
                       </>
-                    ) : (
+                    ) : null}
+                    {(() => {
+                      const hotspot = accidentHotspots?.segments[segment.segmentId];
+                      if (!hotspot || hotspot.total === 0) return null;
+                      return (
+                        <>
+                          <dt>事故熱點</dt>
+                          <dd className="num" style={{ color: road.blocked }}>
+                            {hotspot.total} 件（{accidentHotspots?.year}）
+                          </dd>
+                        </>
+                      );
+                    })()}
+                    {!hasReading && (
                       <>
                         <dt>讀數</dt>
                         <dd className="map-popup__muted">此時間點無資料</dd>
@@ -223,6 +342,35 @@ export default function TrafficMap({
             </Polyline>
           );
         })}
+
+        {/* ── Accident hotspots (data.taipei 114年事故斑點圖) ─── */}
+        {accidentHotspots &&
+          Object.entries(accidentHotspots.segments).map(([segId, hotspot]) => {
+            if (hotspot.total === 0) return null;
+            if (hasFocus && !focusSet.has(segId)) return null;
+            const coords = segmentCoordinates[segId];
+            if (!coords) return null;
+            return (
+              <CircleMarker
+                key={`hotspot-${segId}`}
+                center={segmentMidpoint(coords)}
+                radius={hotspotRadius(hotspot.total)}
+                pathOptions={{
+                  color: road.blocked,
+                  fillColor: road.blocked,
+                  fillOpacity: 0.18,
+                  weight: 1.5,
+                  opacity: 0.65,
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -6]} opacity={1}>
+                  <span>
+                    {hotspot.name} · {hotspot.total} 件事故（{accidentHotspots.year}）
+                  </span>
+                </Tooltip>
+              </CircleMarker>
+            );
+          })}
 
         {/* ── Base stations ──────────────────────────────────── */}
         {Object.entries(stationCoordinates).map(([bsId, pos]) => (

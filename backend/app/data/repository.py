@@ -13,12 +13,14 @@ class DataRepository:
         self.crowd_density_path = DATA_DIR / "signaling_crowd_density.csv"
         self.road_network_path = DATA_DIR / "road_network_geometry.json"
         self.live_incidents_path = DATA_DIR / "live_incidents.json"
-        
+        self.accident_hotspots_path = DATA_DIR / "accident_hotspots.json"
+
         # Cache data in memory for MVP
         self._traffic_data = None
         self._crowd_data = None
         self._road_network = None
         self._live_incidents = None
+        self._accident_hotspots = None
 
     def get_traffic_flow(self) -> List[Dict[str, Any]]:
         if self._traffic_data is None:
@@ -81,6 +83,33 @@ class DataRepository:
                 })
             self._road_network = mapped
         return self._road_network
+
+    def get_accident_hotspots(self) -> Dict[str, Any]:
+        """114年臺北市道路交通事故斑點圖 (data.taipei) 依路段近似座標比對後的統計。
+        來源與比對方法見 accident_hotspots.json 內的 source/method 欄位。"""
+        if self._accident_hotspots is None:
+            if not self.accident_hotspots_path.exists():
+                return {"segments": {}}
+            with open(self.accident_hotspots_path, 'r', encoding='utf-8') as f:
+                raw = json.load(f)
+
+            segments = {
+                seg_id: {
+                    "name": info.get("name"),
+                    "total": info.get("total", 0),
+                    "a1Fatal": info.get("a1_fatal", 0),
+                    "a2Injury": info.get("a2_injury", 0),
+                }
+                for seg_id, info in raw.get("segments", {}).items()
+            }
+            self._accident_hotspots = {
+                "source": raw.get("source"),
+                "year": raw.get("year"),
+                "method": raw.get("method"),
+                "matchedTotal": raw.get("matched_total"),
+                "segments": segments,
+            }
+        return self._accident_hotspots
 
     def get_live_incidents(self) -> List[Dict[str, Any]]:
         if self._live_incidents is None:

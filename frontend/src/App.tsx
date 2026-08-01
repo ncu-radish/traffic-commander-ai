@@ -9,7 +9,7 @@ import AlertBannerComponent from './components/AlertBanner';
 import MetricsBar from './components/MetricsBar';
 import TimelineControl from './components/TimelineControl';
 import FortuneDraw from './components/FortuneDraw';
-import type { LiveIncident, AlertBanner, TrafficSegment, CrowdDensity, RoadSegment } from './types';
+import type { LiveIncident, AlertBanner, TrafficSegment, CrowdDensity, RoadSegment, AccidentHotspots } from './types';
 import './App.css';
 
 const API_BASE = 'http://localhost:8000/api';
@@ -32,6 +32,16 @@ function App() {
   const [focusedSegmentId, setFocusedSegmentId] = useState<string | null>(null);
   // Advisory column is a drawer below 1180px.
   const [advisoryOpen, setAdvisoryOpen] = useState(false);
+
+  // 台北市開放資料：114年道路交通事故斑點圖，依路段比對後的統計。
+  // 獨立 fetch、獨立失敗處理，缺這份資料不該讓整個 Dashboard 掛掉。
+  const [accidentHotspots, setAccidentHotspots] = useState<AccidentHotspots | null>(null);
+  useEffect(() => {
+    fetch(`${API_BASE}/traffic/accident-hotspots`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => setAccidentHotspots(data))
+      .catch(() => setAccidentHotspots(null));
+  }, []);
 
   // Fetch initial data
   useEffect(() => {
@@ -269,6 +279,7 @@ function App() {
             <TrafficMap
               trafficData={currentTraffic}
               roadNetwork={roadNetwork}
+              accidentHotspots={accidentHotspots}
               activeIncidents={activeIncidents}
               selectedSegmentId={focusedSegmentId}
               onSelectSegment={handleSelectSegment}
