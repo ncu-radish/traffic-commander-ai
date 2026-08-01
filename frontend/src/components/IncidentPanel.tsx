@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion';
 import type { LiveIncident } from '../types';
 import './IncidentPanel.css';
 
@@ -8,66 +7,85 @@ interface IncidentPanelProps {
   onInjectIncident: (incident: LiveIncident) => void;
 }
 
-const typeLabels: Record<string, { label: string; icon: string }> = {
-  Road_Collapse_Accident: { label: '路面塌陷', icon: '🕳️' },
-  Crowd_Surge_Injury: { label: '人群推擠', icon: '🏃' },
-  Power_Failure: { label: '號誌故障', icon: '⚡' },
+/** Incident type → SOP article that governs the response. */
+const typeMeta: Record<string, { label: string; sop: string }> = {
+  Road_Collapse_Accident: { label: '路面塌陷', sop: 'SOP 第 2 條' },
+  Crowd_Surge_Injury: { label: '人群推擠', sop: 'SOP 第 3 條' },
+  Power_Failure: { label: '號誌故障', sop: 'SOP 第 5 條' },
 };
 
-const severityClass: Record<string, string> = {
-  Critical: 'badge-danger',
-  High: 'badge-warning',
-  Medium: 'badge-info',
+const severityMeta: Record<string, { cls: string; badge: string }> = {
+  Critical: { cls: 'is-a', badge: 'badge-danger' },
+  High: { cls: 'is-a', badge: 'badge-danger' },
+  Medium: { cls: 'is-b', badge: 'badge-warning' },
 };
 
-export default function IncidentPanel({ incidents, activeIncidents, onInjectIncident }: IncidentPanelProps) {
+export default function IncidentPanel({
+  incidents,
+  activeIncidents,
+  onInjectIncident,
+}: IncidentPanelProps) {
   const activeIds = new Set(activeIncidents.map((i) => i.eventId));
 
+  if (incidents.length === 0) {
+    return (
+      <div className="panel">
+        <div className="state">
+          <span className="state__title">無待處理事件</span>
+          <span>live_incidents.json 未載入或為空</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="incident-panel glass-panel">
-      <div className="glass-panel-header">
-        <span>🚨</span>
-        突發事件注入器
-      </div>
+    <div className="incidents">
+      {incidents.map((incident) => {
+        const isActive = activeIds.has(incident.eventId);
+        const meta = typeMeta[incident.type] ?? {
+          label: incident.type,
+          sop: '—',
+        };
+        const sev = severityMeta[incident.severity] ?? {
+          cls: '',
+          badge: 'badge-neutral',
+        };
 
-      <div className="incident-list">
-        {incidents.map((incident, i) => {
-          const isActive = activeIds.has(incident.eventId);
-          const typeInfo = typeLabels[incident.type] || { label: incident.type, icon: '⚠️' };
+        return (
+          <article
+            key={incident.eventId}
+            className={`incident panel status-rail ${sev.cls} ${
+              isActive ? 'incident--active' : 'panel--interactive'
+            }`}
+          >
+            <header className="incident__top">
+              <span className="incident__type">{meta.label}</span>
+              <span className={`badge ${sev.badge}`}>{incident.severity}</span>
+            </header>
 
-          return (
-            <motion.div
-              key={incident.eventId}
-              className={`incident-card ${isActive ? 'active' : ''}`}
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.1 }}
-            >
-              <div className="incident-header">
-                <span className="incident-icon">{typeInfo.icon}</span>
-                <span className="incident-type">{typeInfo.label}</span>
-                <span className={`badge ${severityClass[incident.severity] || 'badge-neutral'}`}>
-                  {incident.severity}
-                </span>
-              </div>
+            <p className="incident__location">{incident.location}</p>
+            <p className="incident__desc">{incident.description}</p>
 
-              <p className="incident-location">{incident.location}</p>
-              <p className="incident-desc">{incident.description}</p>
+            <div className="incident__meta">
+              <span className="badge badge-neutral">{meta.sop}</span>
+              <span className="incident__seg num">{incident.affectedSegment}</span>
+            </div>
 
-              <div className="incident-footer">
-                <span className="incident-time">🕐 {incident.timestamp}</span>
-                <button
-                  className={`btn ${isActive ? 'btn-ghost' : 'btn-danger'} btn-sm`}
-                  onClick={() => onInjectIncident(incident)}
-                  disabled={isActive}
-                >
-                  {isActive ? '✓ 已注入' : '注入事件'}
-                </button>
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
+            <footer className="incident__foot">
+              <time className="incident__time num">
+                {incident.timestamp.split(' ')[1] ?? incident.timestamp}
+              </time>
+              <button
+                className={`btn btn-sm ${isActive ? 'btn-ghost' : 'btn-danger'}`}
+                onClick={() => onInjectIncident(incident)}
+                disabled={isActive}
+              >
+                {isActive ? '已注入' : '注入事件'}
+              </button>
+            </footer>
+          </article>
+        );
+      })}
     </div>
   );
 }

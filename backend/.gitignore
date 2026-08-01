@@ -152,6 +152,10 @@ activemq-data/
 # Environments
 .env
 .envrc
+# Catch .env.local, .env.bak.*, .env.production etc. so a stray copy of a
+# populated env file can never be committed. .env.example stays tracked.
+.env.*
+!.env.example
 .venv
 env/
 venv/

@@ -1,57 +1,79 @@
-import { motion } from 'framer-motion';
 import './Header.css';
 
 interface HeaderProps {
   activeIncidentCount: number;
   alertCount: number;
+  currentTimestamp?: string;
+  onToggleAdvisory?: () => void;
 }
 
-export default function Header({ activeIncidentCount, alertCount }: HeaderProps) {
+export default function Header({
+  activeIncidentCount,
+  alertCount,
+  currentTimestamp,
+  onToggleAdvisory,
+}: HeaderProps) {
   return (
-    <motion.header
-      className="header"
-      initial={{ y: -20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.4 }}
-    >
-      <div className="header-left">
-        <div className="header-logo">
-          <span className="logo-icon">🛡️</span>
-          <div>
-            <h1 className="header-title">交通指揮官 AI</h1>
-            <p className="header-subtitle">Traffic Commander Agent</p>
-          </div>
+    <header className="header">
+      <div className="header__brand">
+        <span className="header__mark" aria-hidden="true" />
+        <div className="header__titles">
+          <h1 className="header__title">交通指揮官 AI</h1>
+          <span className="header__subtitle">Traffic Commander Agent</span>
         </div>
       </div>
 
-      <div className="header-center">
-        <span className="header-badge badge badge-info">
-          中華電信 × 信義計畫區
-        </span>
+      <div className="header__context">
+        <span className="header__org">中華電信</span>
+        <span className="header__sep" aria-hidden="true" />
+        <span>信義計畫區</span>
       </div>
 
-      <div className="header-right">
-        {alertCount > 0 && (
-          <motion.div
-            className="header-alert-count"
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 500 }}
+      <div className="header__status">
+        {currentTimestamp && (
+          <div className="header__clock" title="模擬時間軸位置">
+            <span className="header__clock-label">SIM</span>
+            <span className="num header__clock-time">
+              {currentTimestamp.split(' ')[1] ?? '--:--'}
+            </span>
+          </div>
+        )}
+
+        <div className="header__counters">
+          <div
+            className={`header__stat ${alertCount > 0 ? 'is-b' : ''}`}
+            title="作用中的 SOP 門檻警報"
           >
-            <span className="pulse-dot danger" />
-            {alertCount} 則警報
-          </motion.div>
-        )}
-        {activeIncidentCount > 0 && (
-          <div className="header-incident-count">
-            🚨 {activeIncidentCount} 起事件處理中
+            <span className="dot" />
+            <span className="num">{alertCount}</span>
+            <span className="header__stat-label">警報</span>
           </div>
-        )}
-        <div className="header-status">
-          <span className="status-dot" />
-          系統運行中
+
+          <div
+            className={`header__stat ${activeIncidentCount > 0 ? 'is-a' : ''}`}
+            title="已注入且處理中的事件"
+          >
+            <span className="dot" />
+            <span className="num">{activeIncidentCount}</span>
+            <span className="header__stat-label">事件</span>
+          </div>
         </div>
+
+        <div className="header__health" title="後端連線正常">
+          <span className="status-dot" />
+          <span className="header__health-label">系統運行中</span>
+        </div>
+
+        {onToggleAdvisory && (
+          <button
+            className="btn btn-sm advisory-toggle"
+            onClick={onToggleAdvisory}
+            aria-label="切換策略諮詢面板"
+          >
+            諮詢
+          </button>
+        )}
       </div>
-    </motion.header>
+    </header>
   );
 }

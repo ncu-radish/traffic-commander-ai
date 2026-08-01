@@ -1,8 +1,10 @@
-import { MapContainer, TileLayer, Polyline, Popup, CircleMarker, Tooltip } from 'react-leaflet';
+import { MapContainer, TileLayer, Polyline, Popup, CircleMarker, Marker, Tooltip } from 'react-leaflet';
+import L from 'leaflet';
 import type { TrafficSegment, RoadSegment, LiveIncident } from '../types';
+import { road, saturationColor, saturationWeight, threshold } from '../theme/tokens';
 import './TrafficMap.css';
 
-// Approximate coordinates for Xinyi District road segments
+/* ── Approximate geometry for Xinyi District segments ──────────── */
 const segmentCoordinates: Record<string, [number, number][]> = {
   RD_TPE_001: [[25.0418, 121.5530], [25.0418, 121.5575], [25.0418, 121.5630]], // 忠孝東路四段
   RD_TPE_002: [[25.0445, 121.5575], [25.0418, 121.5575], [25.0395, 121.5575]], // 光復南路
@@ -21,7 +23,6 @@ const segmentCoordinates: Record<string, [number, number][]> = {
   RD_TPE_015: [[25.0470, 121.5490], [25.0418, 121.5490]],                       // 復興南路一段
 };
 
-// Base station locations
 const stationCoordinates: Record<string, [number, number]> = {
   BS_TPE_DOME: [25.0430, 121.5570],
   BS_MRT_BL17: [25.0410, 121.5565],
@@ -34,131 +35,308 @@ const stationCoordinates: Record<string, [number, number]> = {
   BS_TPE_101: [25.0339, 121.5645],
 };
 
-function getSegmentColor(saturation: number): string {
-  if (saturation >= 0.95) return '#ef4444';       // A級 - 紅色
-  if (saturation >= 0.85) return '#f59e0b';       // B級 - 黃色
-  if (saturation >= 0.70) return '#fb923c';       // 注意 - 橙色
-  return '#22c55e';                                // 正常 - 綠色
-}
-
-function getSegmentWeight(saturation: number): number {
-  if (saturation >= 0.95) return 7;
-  if (saturation >= 0.85) return 5;
-  return 4;
-}
+/**
+ * Slow-pulsing locator for an incident. A divIcon rather than a
+ * CircleMarker because the ring needs a CSS animation, and Leaflet
+ * vector layers can't be keyframed reliably across browsers.
+ */
+const incidentIcon = L.divIcon({
+  className: 'incident-marker',
+  html: '<span class="incident-marker__ring"></span><span class="incident-marker__core"></span>',
+  iconSize: [18, 18],
+  iconAnchor: [9, 9],
+});
 
 interface TrafficMapProps {
   trafficData: TrafficSegment[];
   roadNetwork: RoadSegment[];
   activeIncidents: LiveIncident[];
+  /** Segment highlighted from outside the map (e.g. advisory panel). */
+  selectedSegmentId?: string | null;
+  /** Raised when an operator clicks a segment. */
+  onSelectSegment?: (segmentId: string) => void;
+  /** Primary evacuation route from the backend route planner. */
+  primaryRouteId?: string | null;
+  /** Secondary diversion routes. */
+  secondaryRouteIds?: string[];
 }
 
-export default function TrafficMap({ trafficData, roadNetwork, activeIncidents }: TrafficMapProps) {
-  // Build a lookup from segment ID to traffic data
+export default function TrafficMap({
+  trafficData,
+  roadNetwork,
+  activeIncidents,
+  selectedSegmentId,
+  onSelectSegment,
+  primaryRouteId,
+  secondaryRouteIds = [],
+}: TrafficMapProps) {
   const trafficLookup = new Map<string, TrafficSegment>();
   trafficData.forEach((t) => trafficLookup.set(t.segmentId, t));
 
-  // Get affected segments from active incidents
   const affectedSegmentIds = new Set(activeIncidents.map((i) => i.affectedSegment));
+  const secondarySet = new Set(secondaryRouteIds);
+
+  const hasRoutePlan = Boolean(primaryRouteId) || secondaryRouteIds.length > 0;
 
   return (
-    <MapContainer
-      center={[25.0400, 121.5600]}
-      zoom={15}
-      style={{ height: '100%', width: '100%' }}
-      zoomControl={false}
-    >
-      <TileLayer
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-      />
+    <>
+      <MapContainer
+        center={[25.0400, 121.5600]}
+        zoom={15}
+        style={{ height: '100%', width: '100%' }}
+        zoomControl={false}
+        attributionControl={false}
+      >
+        {/* Basemap and labels are separate layers so the matte filter
+            can flatten the terrain without muddying the type. */}
+        <TileLayer
+          className="tile-base"
+          url="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png"
+        />
+        <TileLayer
+          className="tile-labels"
+          url="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png"
+        />
 
-      {/* Render road segments */}
-      {roadNetwork.map((segment) => {
-        const coords = segmentCoordinates[segment.segmentId];
-        if (!coords) return null;
+        {/* ── Road segments ──────────────────────────────────── */}
+        {roadNetwork.map((segment) => {
+          const coords = segmentCoordinates[segment.segmentId];
+          if (!coords) return null;
 
-        const traffic = trafficLookup.get(segment.segmentId);
-        const saturation = traffic?.saturationScore ?? 0.5;
-        const isAffected = affectedSegmentIds.has(segment.segmentId);
+          const traffic = trafficLookup.get(segment.segmentId);
+          const isAffected = affectedSegmentIds.has(segment.segmentId);
+          const isSelected = selectedSegmentId === segment.segmentId;
+          const isPrimary = primaryRouteId === segment.segmentId;
+          const isSecondary = secondarySet.has(segment.segmentId);
 
-        return (
-          <Polyline
-            key={segment.segmentId}
-            positions={coords}
-            pathOptions={{
-              color: isAffected ? '#ff0040' : getSegmentColor(saturation),
-              weight: isAffected ? 8 : getSegmentWeight(saturation),
-              opacity: 0.9,
-              dashArray: isAffected ? '12 6' : undefined,
-            }}
-          >
-            <Popup>
-              <div className="map-popup">
-                <h4>{segment.name}</h4>
-                <p>方向：{segment.flowDirection}</p>
-                {traffic && (
-                  <>
-                    <p>平均車速：{traffic.avgSpeed} km/h</p>
-                    <p>車輛數：{traffic.vehicleCount}</p>
-                    <p>飽和度：{(traffic.saturationScore * 100).toFixed(0)}%</p>
-                    <p>狀態：{traffic.laneStatus}</p>
-                  </>
-                )}
-                {isAffected && <p className="incident-tag">⚠️ 事故影響中</p>}
-              </div>
-            </Popup>
-          </Polyline>
-        );
-      })}
+          // No reading for this timestamp: draw as inert geometry
+          // rather than implying a measured value.
+          const hasReading = traffic !== undefined;
+          const saturation = traffic?.saturationScore ?? 0;
 
-      {/* Render base station markers */}
-      {Object.entries(stationCoordinates).map(([bsId, pos]) => (
-        <CircleMarker
-          key={bsId}
-          center={pos}
-          radius={6}
-          pathOptions={{
-            color: '#00d4ff',
-            fillColor: '#00d4ff',
-            fillOpacity: 0.6,
-            weight: 2,
-          }}
-        >
-          <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
-            <span style={{ fontSize: '0.8rem' }}>{bsId}</span>
-          </Tooltip>
-        </CircleMarker>
-      ))}
+          let color: string = road.default;
+          let weight = 2.5;
+          let dashArray: string | undefined;
+          let opacity = 0.5;
 
-      {/* Render incident markers */}
-      {activeIncidents.map((incident) => {
-        const pos = stationCoordinates[incident.affectedSegment] ??
-          segmentCoordinates[incident.affectedSegment]?.[1];
-        if (!pos) return null;
+          if (hasReading) {
+            color = saturationColor(saturation);
+            weight = saturationWeight(saturation);
+            opacity = 0.9;
+          }
 
-        return (
+          if (isPrimary) {
+            color = road.primaryRoute;
+            weight = 6;
+            opacity = 1;
+          } else if (isSecondary) {
+            color = road.secondaryRoute;
+            weight = 3.5;
+            dashArray = '7 6';
+            opacity = 0.95;
+          }
+
+          if (isAffected) {
+            color = road.blocked;
+            weight = 6;
+            dashArray = '3 7';
+            opacity = 1;
+          }
+
+          return (
+            <Polyline
+              key={segment.segmentId}
+              positions={coords}
+              pathOptions={{
+                color,
+                weight: isSelected ? weight + 2 : weight,
+                opacity,
+                dashArray,
+                lineCap: 'round',
+                className: isSelected ? 'segment--selected' : undefined,
+              }}
+              eventHandlers={{
+                click: () => onSelectSegment?.(segment.segmentId),
+              }}
+            >
+              <Popup className="map-popup-wrap">
+                <div className="map-popup">
+                  <header className="map-popup__head">
+                    <span className="map-popup__name">{segment.name}</span>
+                    <span className="map-popup__id num">{segment.segmentId}</span>
+                  </header>
+
+                  <dl className="map-popup__grid">
+                    <dt>方向</dt>
+                    <dd>{segment.flowDirection}</dd>
+
+                    <dt>容量</dt>
+                    <dd className="num">
+                      {segment.capacityVph.toLocaleString()} vph
+                      {segment.capacityVph < 1000 && (
+                        <span className="map-popup__flag"> 未達 1000</span>
+                      )}
+                    </dd>
+
+                    {hasReading ? (
+                      <>
+                        <dt>車速</dt>
+                        <dd className="num">{traffic.avgSpeed} km/h</dd>
+                        <dt>車輛數</dt>
+                        <dd className="num">{traffic.vehicleCount.toLocaleString()}</dd>
+                        <dt>飽和度</dt>
+                        <dd
+                          className="num map-popup__sat"
+                          style={{ color: saturationColor(saturation) }}
+                        >
+                          {(saturation * 100).toFixed(0)}%
+                          {saturation >= threshold.saturationA
+                            ? ' · A 級'
+                            : saturation >= threshold.saturationB
+                              ? ' · B 級'
+                              : ''}
+                        </dd>
+                        <dt>狀態</dt>
+                        <dd>{traffic.laneStatus}</dd>
+                      </>
+                    ) : (
+                      <>
+                        <dt>讀數</dt>
+                        <dd className="map-popup__muted">此時間點無資料</dd>
+                      </>
+                    )}
+                  </dl>
+
+                  {isAffected && (
+                    <p className="map-popup__alert">事故影響中 · 已封閉</p>
+                  )}
+                  {isPrimary && (
+                    <p className="map-popup__route">主疏散路徑</p>
+                  )}
+                  {isSecondary && (
+                    <p className="map-popup__route map-popup__route--secondary">
+                      次要替代路徑
+                    </p>
+                  )}
+                </div>
+              </Popup>
+            </Polyline>
+          );
+        })}
+
+        {/* ── Base stations ──────────────────────────────────── */}
+        {Object.entries(stationCoordinates).map(([bsId, pos]) => (
           <CircleMarker
-            key={incident.eventId}
-            center={pos as [number, number]}
-            radius={12}
+            key={bsId}
+            center={pos}
+            radius={3}
             pathOptions={{
-              color: '#ef4444',
-              fillColor: '#ef4444',
-              fillOpacity: 0.4,
-              weight: 3,
+              color: 'rgba(134, 166, 194, 0.55)',
+              fillColor: 'rgba(134, 166, 194, 0.35)',
+              fillOpacity: 1,
+              weight: 1,
             }}
           >
-            <Popup>
-              <div className="map-popup">
-                <h4>🚨 {incident.type}</h4>
-                <p>{incident.description}</p>
-                <p>狀態：{incident.status} | 嚴重度：{incident.severity}</p>
-              </div>
-            </Popup>
+            <Tooltip direction="top" offset={[0, -6]} opacity={1}>
+              <span className="num">{bsId}</span>
+            </Tooltip>
           </CircleMarker>
-        );
-      })}
-    </MapContainer>
+        ))}
+
+        {/* ── Incident locators ──────────────────────────────── */}
+        {activeIncidents.map((incident) => {
+          const pos =
+            stationCoordinates[incident.affectedSegment] ??
+            segmentCoordinates[incident.affectedSegment]?.[1];
+          if (!pos) return null;
+
+          return (
+            <Marker
+              key={incident.eventId}
+              position={pos as [number, number]}
+              icon={incidentIcon}
+              eventHandlers={{
+                click: () => onSelectSegment?.(incident.affectedSegment),
+              }}
+            >
+              <Popup className="map-popup-wrap">
+                <div className="map-popup">
+                  <header className="map-popup__head">
+                    <span className="map-popup__name">{incident.location}</span>
+                    <span className="map-popup__id num">{incident.eventId}</span>
+                  </header>
+                  <p className="map-popup__desc">{incident.description}</p>
+                  <dl className="map-popup__grid">
+                    <dt>狀態</dt>
+                    <dd>{incident.status}</dd>
+                    <dt>嚴重度</dt>
+                    <dd>{incident.severity}</dd>
+                    <dt>影響路段</dt>
+                    <dd className="num">{incident.affectedSegment}</dd>
+                  </dl>
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+      </MapContainer>
+
+      {/* ── Legend ───────────────────────────────────────────── */}
+      <div className="map-legend">
+        <div className="map-legend__group">
+          <span className="map-legend__title">飽和度</span>
+          <LegendLine color={saturationColor(0.99)} label="A 級 ≥95%" />
+          <LegendLine color={saturationColor(0.9)} label="B 級 85–95%" />
+          <LegendLine color={saturationColor(0.75)} label="注意 70–85%" />
+          <LegendLine color={saturationColor(0.3)} label="正常 <70%" />
+        </div>
+
+        {hasRoutePlan && (
+          <div className="map-legend__group">
+            <span className="map-legend__title">疏導</span>
+            <LegendLine color={road.primaryRoute} label="主疏散" width={4} />
+            <LegendLine
+              color={road.secondaryRoute}
+              label="次要替代"
+              width={2}
+              dashed
+            />
+          </div>
+        )}
+
+        {activeIncidents.length > 0 && (
+          <div className="map-legend__group">
+            <span className="map-legend__title">事件</span>
+            <LegendLine color={road.blocked} label="封閉路段" dashed />
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* ─── Legend row ──────────────────────────────────────────────── */
+
+interface LegendLineProps {
+  color: string;
+  label: string;
+  width?: number;
+  dashed?: boolean;
+}
+
+function LegendLine({ color, label, width = 3, dashed }: LegendLineProps) {
+  return (
+    <div className="map-legend__row">
+      <span
+        className="map-legend__swatch"
+        style={{
+          background: dashed
+            ? `repeating-linear-gradient(90deg, ${color} 0 5px, transparent 5px 9px)`
+            : color,
+          height: width,
+        }}
+      />
+      <span className="map-legend__label">{label}</span>
+    </div>
   );
 }

@@ -1,101 +1,156 @@
-/* ============================================
+/* ═══════════════════════════════════════════════════════════════
    Traffic Commander AI — Design Tokens
-   Global CSS Custom Properties
-   ============================================ */
+
+   Matte-black situation room. No neon, no glow, no gradients.
+   Reference feel: Bloomberg Terminal / ATC tower / premium HUD.
+
+   This is the single source of truth for CSS. Canvas consumers
+   (ECharts, Leaflet) read the mirrored values in src/theme/tokens.ts.
+   ═══════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ── Color: Backgrounds ── */
-  --color-bg-primary: #0a0e1a;
-  --color-bg-secondary: #0f1629;
-  --color-bg-tertiary: #1a1f3a;
-  --color-bg-elevated: #1e2545;
-  --color-bg-surface: rgba(15, 22, 41, 0.85);
+  /* ─── Surfaces: matte black with a faint cool-grey haze ─── */
+  --surface-base:      #121214;  /* app background */
+  --surface-sunken:    #0E0E10;  /* wells, map frame, trays */
+  --surface-panel:     #1C1D21;  /* cards / panels */
+  --surface-raised:    #222328;  /* hover, nested rows */
+  --surface-input:     #191A1E;
 
-  /* ── Color: Accents ── */
-  --color-accent-cyan: #00d4ff;
-  --color-accent-cyan-bright: #00f0ff;
-  --color-accent-blue: #0091ff;
-  --color-accent-green: #22c55e;
-  --color-accent-amber: #f59e0b;
-  --color-accent-red: #ef4444;
-  --color-accent-red-deep: #dc2626;
-  --color-accent-amber-deep: #d97706;
+  /* ─── Hairlines: layering via lightness, never colour ─── */
+  --line-faint:        #23242A;
+  --line:              #2A2B30;
+  --line-strong:       #35363D;
 
-  /* ── Color: Text ── */
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #cbd5e1;
-  --color-text-muted: #94a3b8;
-  --color-text-disabled: #475569;
+  /* ─── Text ─── */
+  --text-primary:      #E8E8EA;  /* not pure white — softer contrast */
+  --text-secondary:    #9A9CA3;
+  --text-muted:        #6E7076;
+  --text-disabled:     #4E5057;
 
-  /* ── Color: Borders & Glass ── */
-  --color-border-glass: rgba(255, 255, 255, 0.08);
-  --color-border-glass-hover: rgba(255, 255, 255, 0.12);
-  --color-border-subtle: rgba(255, 255, 255, 0.06);
-  --color-border-interactive: rgba(255, 255, 255, 0.15);
+  /* ─── Status: traffic-signal semantics, desaturated + hazed ─── */
+  --level-a:           #B54A3F;  /* A 級 — fire-hydrant red, dimmed */
+  --level-a-soft:      rgba(181, 74, 63, 0.13);
+  --level-a-line:      rgba(181, 74, 63, 0.34);
 
-  /* ── Typography ── */
-  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    Oxygen, Ubuntu, Cantarell, sans-serif;
-  --text-xs: 0.75rem;    /* 12px */
-  --text-sm: 0.875rem;   /* 14px */
-  --text-base: 1rem;     /* 16px */
-  --text-lg: 1.125rem;   /* 18px */
-  --text-xl: 1.25rem;    /* 20px */
-  --text-2xl: 1.5rem;    /* 24px */
-  --text-3xl: 1.875rem;  /* 30px */
-  --line-height-tight: 1.25;
-  --line-height-normal: 1.5;
-  --line-height-relaxed: 1.75;
+  --level-b:           #C08B3E;  /* B 級 — amber / ochre */
+  --level-b-soft:      rgba(192, 139, 62, 0.12);
+  --level-b-line:      rgba(192, 139, 62, 0.32);
 
-  /* ── Spacing (4px increments) ── */
+  --level-ok:          #4C8C6B;  /* normal / cleared — moss */
+  --level-ok-soft:     rgba(76, 140, 107, 0.12);
+  --level-ok-line:     rgba(76, 140, 107, 0.30);
+
+  /* ─── Accent: cool grey-blue. Punctuation only, never fields. ─── */
+  --accent:            #6C8CA8;
+  --accent-bright:     #86A6C2;
+  --accent-dim:        #4E6B84;
+  --accent-soft:       rgba(108, 140, 168, 0.12);
+  --accent-line:       rgba(108, 140, 168, 0.30);
+
+  /* ─── Map geometry ─── */
+  --road-default:      #3A3C42;
+  --road-arterial:     #4A4D55;
+  --map-frame:         #0E0E10;
+
+  /* ─── Spacing (4px base) ─── */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
-  --space-7: 28px;
   --space-8: 32px;
-  --space-9: 36px;
   --space-10: 40px;
-  --space-12: 48px;
-  --space-14: 56px;
-  --space-16: 64px;
 
-  /* ── Border Radius ── */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
-  --radius-full: 999px;
+  /* ─── Radii: settled, neither capsule nor sharp ─── */
+  --radius-sm:   6px;
+  --radius:      10px;
+  --radius-md:   10px;
+  --radius-lg:   12px;
+  --radius-pill: 999px;
 
-  /* ── Transitions ── */
-  --transition-fast: 150ms ease;
-  --transition-normal: 250ms ease;
-  --transition-slow: 400ms ease;
+  /* ─── Elevation: depth from black, never coloured bloom ─── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow:    0 2px 8px rgba(0, 0, 0, 0.40);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.40);
+  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.55);
+  /* 1px top highlight — reads as matte material catching light */
+  --sheen-top: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 
-  /* ── Glassmorphism ── */
-  --glass-bg: rgba(15, 22, 41, 0.85);
-  --glass-bg-light: rgba(15, 22, 41, 0.65);
-  --glass-blur: blur(12px);
-  --glass-blur-heavy: blur(20px);
-  --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+  /* ─── Type ───
+     System stack first: no render-blocking web font during a live
+     demo, and PingFang TC handles CJK better than most webfonts. */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+               'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Consolas, monospace;
+  --font-family: var(--font-sans);
 
-  /* ── Shadows & Glow ── */
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
-  --shadow-glow-cyan: 0 0 20px rgba(0, 212, 255, 0.4);
-  --shadow-glow-cyan-lg: 0 0 40px rgba(0, 212, 255, 0.25);
-  --shadow-glow-green: 0 0 20px rgba(34, 197, 94, 0.35);
-  --shadow-glow-amber: 0 0 20px rgba(245, 158, 11, 0.35);
-  --shadow-glow-red: 0 0 20px rgba(239, 68, 68, 0.35);
+  --text-xs:   11px;
+  --text-sm:   12px;
+  --text-base: 13px;
+  --text-md:   14px;
+  --text-lg:   16px;
+  --text-xl:   20px;
+  --text-2xl:  26px;
+  --text-3xl:  34px;
 
-  /* ── Z-Index Scale ── */
-  --z-base: 0;
-  --z-dropdown: 10;
-  --z-sticky: 20;
-  --z-overlay: 30;
-  --z-modal: 40;
-  --z-toast: 50;
+  /* CJK needs more leading than Latin at the same size */
+  --leading-tight: 1.35;
+  --leading:       1.6;
+
+  /* ─── Layers ─── */
+  --z-map:      1;
+  --z-overlay:  10;
+  --z-header:   30;
+  --z-dropdown: 40;
+  --z-modal:    50;
+  --z-toast:    60;
+
+  /* ─── Motion ─── */
+  --ease:      200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-slow: 380ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast:   150ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow:   380ms ease;
+
+  color-scheme: dark;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Legacy aliases
+
+   Earlier iterations of this dashboard used a cyan/indigo palette
+   (--color-*). Any stylesheet still referencing those names now
+   resolves to the matte equivalents, so nothing falls back to the
+   old neon values.
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  --color-bg-primary:   var(--surface-base);
+  --color-bg-secondary: var(--surface-sunken);
+  --color-bg-tertiary:  var(--surface-panel);
+  --color-bg-elevated:  var(--surface-raised);
+  --color-bg-surface:   var(--surface-panel);
+
+  --color-text-primary:   var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted:     var(--text-muted);
+  --color-text-disabled:  var(--text-disabled);
+
+  --color-border-glass:       var(--line-faint);
+  --color-border-glass-hover: var(--line);
+  --color-border-subtle:      var(--line-faint);
+  --color-border-interactive: var(--line);
+
+  --color-accent-cyan:        var(--accent);
+  --color-accent-cyan-bright: var(--accent-bright);
+  --color-accent-blue:        var(--accent-dim);
+  --color-accent-green:       var(--level-ok);
+  --color-accent-amber:       var(--level-b);
+  --color-accent-amber-deep:  var(--level-b);
+  --color-accent-red:         var(--level-a);
+  --color-accent-red-deep:    var(--level-a);
+
+  --color-success: var(--level-ok);
+  --color-warning: var(--level-b);
+  --color-danger:  var(--level-a);
 }
