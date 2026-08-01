@@ -18,14 +18,23 @@ router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 
 @router.get("/check", response_model=AlertCheckResponse)
-def check_sop_thresholds(timestamp: str):
+def check_sop_thresholds(timestamp: str, active_incident_ids: Optional[str] = None):
     """
     Check all SOP thresholds for a given timestamp.
     Returns triggered alerts for traffic, crowd, and roaming.
+
+    active_incident_ids: 逗號分隔的 event_id 清單。前端的事件是「注入」才算生效
+    （模擬情境），第 2/5 條只針對事故/號誌故障事件，若不傳這個參數則沿用舊行為
+    （檢查資料裡全部的事件），傳了就只檢查已注入的那幾筆，避免還沒注入的事件
+    就先跳警報。
     """
     traffic_df = repository.get_traffic_flow_df()
     crowd_df = repository.get_crowd_density_df()
     incidents = repository.get_live_incidents_raw()
+
+    if active_incident_ids is not None:
+        active_ids = {i for i in active_incident_ids.split(",") if i}
+        incidents = [inc for inc in incidents if inc.get("event_id") in active_ids]
 
     return check_all_sop_thresholds(traffic_df, crowd_df, timestamp, incidents)
 

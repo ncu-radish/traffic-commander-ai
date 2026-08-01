@@ -5,8 +5,11 @@ import RoutePlanner from './components/RoutePlanner';
 import FortuneDraw from './components/FortuneDraw';
 import AlertBannerComponent from './components/AlertBanner';
 import TimelineControl from './components/TimelineControl';
-import type { LiveIncident, TrafficSegment, RoadSegment, CrowdDensity, AccidentHotspots, AlertBanner } from './types';
+import AdvisorySummaryModal from './components/AdvisorySummaryModal';
+import type { LiveIncident, TrafficSegment, RoadSegment, CrowdDensity, AccidentHotspots } from './types';
 import { saturationColor, saturationLevel } from './theme/tokens';
+import { useSopAlerts } from './hooks/useSopAlerts';
+import { useAdvisoryReport } from './hooks/useAdvisoryReport';
 import './UserView.css';
 
 const API_BASE = 'http://localhost:8000/api';
@@ -113,73 +116,18 @@ export default function UserView({ onBack }: UserViewProps) {
     return map;
   }, [trafficFlowData]);
 
-  // SOP門檻警示——跟校方版（App.tsx）用同一套判定，會隨時間軸捲動重新觸發。
-  // 之前只有 App.tsx 有這個橫幅，家長版沒有。
-  const [alerts, setAlerts] = useState<AlertBanner[]>([]);
+  // SOP門檻警示——統一呼叫後端 /api/alerts/check，涵蓋全部7條SOP（含之前漏掉的
+  // 第4條大巨蛋散場、第5條號誌故障），跟校方版共用同一支 hook、同一套判定依據。
+  const { visibleAlerts, dismissAlert } = useSopAlerts(currentTimestamp, activeIncidents);
 
-  useEffect(() => {
-    const newAlerts: AlertBanner[] = [];
-
-    const triggerSegments = currentTraffic.filter(
-      (s) => s.segmentId === 'RD_TPE_001' || s.segmentId === 'RD_TPE_002',
-    );
-    triggerSegments.forEach((seg) => {
-      if (seg.saturationScore >= 0.95) {
-        newAlerts.push({
-          id: `alert-A-${seg.segmentId}-${currentTimestamp}`,
-          level: 'A',
-          title: `A 級癱瘓警報 — ${seg.roadName}`,
-          message: `飽和度 ${(seg.saturationScore * 100).toFixed(0)}%，已達 A 級癱瘓門檻。啟動替代路徑引導與長綠燈時制。`,
-          timestamp: currentTimestamp,
-          sopArticle: 'SOP 第 1 條',
-          dismissed: false,
-        });
-      } else if (seg.saturationScore >= 0.85) {
-        newAlerts.push({
-          id: `alert-B-${seg.segmentId}-${currentTimestamp}`,
-          level: 'B',
-          title: `B 級壅擠警報 — ${seg.roadName}`,
-          message: `飽和度 ${(seg.saturationScore * 100).toFixed(0)}%，已達 B 級壅擠門檻。建議啟動長綠燈時制。`,
-          timestamp: currentTimestamp,
-          sopArticle: 'SOP 第 1 條',
-          dismissed: false,
-        });
-      }
-    });
-
-    const bl17 = currentCrowd.find((c) => c.bsId === 'BS_MRT_BL17');
-    if (bl17 && (bl17.growthRate > 0.3 || bl17.userCount > 25000)) {
-      newAlerts.push({
-        id: `alert-crowd-BL17-${currentTimestamp}`,
-        level: 'A',
-        title: '捷運分流警報 — 國父紀念館站',
-        message: `人數 ${bl17.userCount.toLocaleString()}，成長率 ${(bl17.growthRate * 100).toFixed(0)}%。建議啟動過站不停與接駁分流。`,
-        timestamp: currentTimestamp,
-        sopArticle: 'SOP 第 3 條',
-        dismissed: false,
-      });
-    }
-
-    const roamingStations = currentCrowd.filter((c) => c.roamingUserPct >= 0.3);
-    roamingStations.forEach((station) => {
-      newAlerts.push({
-        id: `alert-roaming-${station.bsId}-${currentTimestamp}`,
-        level: 'B',
-        title: `多語化通報觸發 — ${station.locationName}`,
-        message: `漫遊比率 ${(station.roamingUserPct * 100).toFixed(0)}%，已達 SOP 第 6 條門檻。需產出多國語言告警。`,
-        timestamp: currentTimestamp,
-        sopArticle: 'SOP 第 6 條',
-        dismissed: false,
-      });
-    });
-
-    // 保留使用者手動注入事件產生的警報（不隨門檻重算被清掉）。
-    setAlerts((prev) => [...newAlerts, ...prev.filter((a) => a.id.startsWith('alert-incident-'))]);
-  }, [currentTraffic, currentCrowd, currentTimestamp]);
-
-  const handleDismissAlert = useCallback((alertId: string) => {
-    setAlerts((prev) => prev.map((a) => (a.id === alertId ? { ...a, dismissed: true } : a)));
-  }, []);
+  // 事件注入時自動產出 AI 預警摘要（SOP判定 + 路線規劃 + ETE + LLM生成摘要）並跳出彈窗。
+  const {
+    report: advisoryReport,
+    loading: advisoryLoading,
+    open: advisoryModalOpen,
+    requestAdvisory,
+    close: closeAdvisory,
+  } = useAdvisoryReport();
 
   // 路線規劃好之後，地圖聚焦在「路線本身」+「跟路線路口交叉的路段」——
   // 跟 RoutePlanner 判斷事件是否影響路線用的是同一套「路口交叉」邏輯，維持一致。
@@ -205,20 +153,10 @@ export default function UserView({ onBack }: UserViewProps) {
       if (prev.find((i) => i.eventId === incident.eventId)) return prev;
       return [...prev, incident];
     });
-    // 事件注入當下就要有明確警報——不能只靠飽和度門檻，那是綁在固定的最新一筆資料上，
-    // 不會因為你剛剛注入了事件而重算。
-    setAlerts((prev) => [
-      {
-        id: `alert-incident-${incident.eventId}`,
-        level: incident.severity === 'Critical' || incident.severity === 'High' ? 'A' : 'B',
-        title: `事件通報 — ${incident.location}`,
-        message: incident.description,
-        timestamp: incident.timestamp,
-        dismissed: false,
-      },
-      ...prev,
-    ]);
-  }, []);
+    // 注入後 activeIncidents 變化會讓 useSopAlerts 自動重新查詢——
+    // 事件對應到SOP第2/5條的話會拿到正式條文內容，其餘由 hook 自己補一則通用警報。
+    requestAdvisory(incident.eventId, incident.timestamp);
+  }, [requestAdvisory]);
 
   const handleMapClick = useCallback((segmentId: string, name: string, lat: number, lng: number) => {
     setPickedStart({ segmentId, name });
@@ -229,8 +167,6 @@ export default function UserView({ onBack }: UserViewProps) {
   if (isLoading) {
     return <div className="user-view user-view--loading">載入資料中…</div>;
   }
-
-  const visibleAlerts = alerts.filter((a) => !a.dismissed);
 
   return (
     <div className="user-view">
@@ -245,7 +181,7 @@ export default function UserView({ onBack }: UserViewProps) {
           <AlertBannerComponent
             key={alert.id}
             alert={alert}
-            onDismiss={() => handleDismissAlert(alert.id)}
+            onDismiss={() => dismissAlert(alert.id)}
           />
         ))}
       </div>
@@ -296,6 +232,13 @@ export default function UserView({ onBack }: UserViewProps) {
       </div>
 
       <FortuneDraw trafficData={currentTraffic} crowdData={currentCrowd} roadNetwork={roadNetwork} routeSegmentIds={routePath} />
+
+      <AdvisorySummaryModal
+        open={advisoryModalOpen}
+        loading={advisoryLoading}
+        report={advisoryReport}
+        onClose={closeAdvisory}
+      />
     </div>
   );
 }
