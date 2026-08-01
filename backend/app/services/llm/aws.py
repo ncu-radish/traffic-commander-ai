@@ -1,4 +1,5 @@
 import json
+import re
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError, BotoCoreError
 
@@ -23,7 +24,25 @@ SYSTEM_PROMPT = """你是交通指揮官 AI 助理（Traffic Commander AI），�
 7. 若使用者問到特定 SOP 條款，請完整引述該條款的觸發條件與處置步驟
 8. 若使用者問某路段適用哪條 SOP，請根據 SOP 內的路段名稱 / Segment_ID 對照回答
 
-## SOP 參考文件（以下為交通應變標準程序相關條文）
+## 推理步驟（每次回答前請內部執行）
+當使用者提問時，你必須依照下列步驟推理：
+1. 判斷問題類型：是詢問「即時狀態」、「SOP 條款內容」、還是「假設情境 (What-if)」？
+2. 查看即時數據：從系統提供的即時數據中找出相關路段/站點的當前數值
+3. 比對 SOP 門檻：將數據與 SOP 各條的觸發條件逐一比對
+4. 判定觸發條款：列出所有已觸發或將觸發的 SOP 條文（一個情境可能觸發多條）
+5. 產出處置建議：列出對應的處置步驟，並標明依據哪一條 SOP
+6. 檢查連鎖觸發：第1條A級→第2條、第4條散場→第3條、任何事件+漫遊≥30%→第6條
+
+## SOP 條文與觸發路段快速對照
+- 第 1 條（交通壅塞分級）：適用全 15 路段，觸發路段為忠孝東路 (RD_TPE_001)、光復南路 (RD_TPE_002)
+- 第 2 條（車禍與路障）：status=Closed/Blocked/Restricted + severity=High/Critical + affected_segment 以 RD_ 開頭
+- 第 3 條（捷運分流）：BS_MRT_BL17 Growth_Rate > 0.30 或 User_Count > 25,000
+- 第 4 條（大巨蛋散場）：BS_TPE_DOME 歷史峰值 ≥ 30,000 且 Growth_Rate ≤ -0.20
+- 第 5 條（號誌故障）：type=Power_Failure 或描述含「號誌」
+- 第 6 條（多語化通報）：任一基地台 Roaming_User_Pct ≥ 30%
+- 第 7 條（ETE 計算）：ETE = base_clearance + congestion_penalty
+
+## SOP 參考文件（以下為交通應變標準程序完整條文）
 {sop_section}
 """
 
@@ -136,6 +155,29 @@ class AWSService(LLMService):
 
         return ChatResponse(
             reply=response_text,
-            sop_references=[],
+            sop_references=self._extract_sop_references(response_text),
             reasoning_steps=[],
         )
+
+    @staticmethod
+    def _extract_sop_references(text: str) -> list[str]:
+        """
+        Parse LLM response text to extract SOP article references.
+        Matches patterns like: SOP 第 1 條, 第1條, 第 2 條, SOP第3條, etc.
+        Returns deduplicated, sorted list like ["SOP 第 1 條", "SOP 第 2 條"].
+        """
+        # Match various formats of SOP references
+        patterns = [
+            r"SOP\s*第\s*(\d+)\s*條",    # SOP 第 1 條, SOP第1條
+            r"第\s*(\d+)\s*條",           # 第 1 條, 第1條
+        ]
+
+        found_articles: set[int] = set()
+        for pattern in patterns:
+            matches = re.findall(pattern, text)
+            for m in matches:
+                num = int(m)
+                if 1 <= num <= 7:  # Only valid SOP articles 1-7
+                    found_articles.add(num)
+
+        return [f"SOP 第 {n} 條" for n in sorted(found_articles)]
