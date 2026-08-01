@@ -15,7 +15,9 @@ interface RouteResult {
 
 type RouteCheckModal =
   | { status: 'affected'; blockedSegment: string; alternative: RouteResult }
-  | { status: 'clear'; checkedSegment: string };
+  | { status: 'no-alternative'; blockedSegment: string }
+  | { status: 'clear'; checkedSegment: string }
+  | { status: 'crowd-advisory'; spot: CrowdDensity };
 
 interface RoutePlannerProps {
   roadNetwork: RoadSegment[];
@@ -105,9 +107,14 @@ export default function RoutePlanner({
     const result = await runPlan(blockedIds);
     setLoading(false);
     setRoute(result);
-    setCheckModal(null);
     checkedIncidentIdsRef.current = new Set(activeIncidents.map((i) => i.eventId));
-    if (result.reachable) onRouteChange?.(result.path);
+    if (result.reachable) {
+      onRouteChange?.(result.path);
+      const surge = findCrowdSurge(result.path);
+      setCheckModal(surge ? { status: 'crowd-advisory', spot: surge } : null);
+    } else {
+      setCheckModal(null);
+    }
   };
 
   // 每次有「新的」事件被注入（不是重複觸發），只要目前有規劃中的路線，
@@ -130,7 +137,15 @@ export default function RoutePlanner({
 
     let cancelled = false;
     runPlan(blockedIds).then((alternative) => {
-      if (!cancelled) {
+      if (cancelled) return;
+      const samePathAsBefore =
+        alternative.reachable && alternative.path.join(',') === current.path.join(',');
+      if (samePathAsBefore) {
+        setCheckModal({
+          status: 'no-alternative',
+          blockedSegment: affectedIncident.affectedSegment,
+        });
+      } else {
         setCheckModal({ status: 'affected', blockedSegment: affectedIncident.affectedSegment, alternative });
       }
     });
@@ -153,18 +168,23 @@ export default function RoutePlanner({
 
   const segmentName = (id: string) => roadNetwork.find((s) => s.segmentId === id)?.name ?? id;
 
-  // 路線沿途若有基地台人潮異常（SOP第3條門檻），提醒可以考慮改搭大眾運輸——
+  // 找出指定路段附近有沒有人潮異常的基地台（SOP第3條門檻），共用給
+  // 「路線沿途建議」跟「事故路口疏散建議」兩處使用。
+  const findCrowdSurge = useCallback(
+    (segmentIds: string[]) => {
+      const nearbyStationIds = new Set(
+        segmentIds.flatMap((segId) => roadNetwork.find((s) => s.segmentId === segId)?.nearbyStations ?? []),
+      );
+      if (nearbyStationIds.size === 0) return null;
+      const surging = crowdData.filter((c) => nearbyStationIds.has(c.bsId) && isCrowdSurging(c));
+      return surging[0] ?? null;
+    },
+    [roadNetwork, crowdData],
+  );
+
+  // 路線沿途若有基地台人潮異常，提醒可以考慮改搭大眾運輸——
   // 不是另外做一套多模式路線演算法，只是把已經有的人流資料變成一句實用建議。
-  const transitSuggestion = (() => {
-    if (!route?.reachable) return null;
-    const nearbyStationIds = new Set(
-      route.path.flatMap((segId) => roadNetwork.find((s) => s.segmentId === segId)?.nearbyStations ?? []),
-    );
-    if (nearbyStationIds.size === 0) return null;
-    const surging = crowdData.filter((c) => nearbyStationIds.has(c.bsId) && isCrowdSurging(c));
-    if (surging.length === 0) return null;
-    return surging[0];
-  })();
+  const transitSuggestion = route?.reachable ? findCrowdSurge(route.path) : null;
 
   return (
     <div className="route-planner glass-panel">
@@ -244,6 +264,41 @@ export default function RoutePlanner({
                 <p>
                   <strong>{segmentName(checkModal.checkedSegment)}</strong> 剛發生事件，但不在您目前規劃的路線上，可依原計畫通行。
                 </p>
+                <button className="route-planner__btn" onClick={closeModal}>知道了</button>
+              </>
+            ) : checkModal.status === 'no-alternative' ? (
+              <>
+                <div className="route-check-modal__icon route-check-modal__icon--warn">⚠</div>
+                <h3>無法繞開，請小心慢行</h3>
+                <p>
+                  <strong>{segmentName(checkModal.blockedSegment)}</strong> 剛發生事故，這個路口目前繞不開，請小心慢行、留意管制。
+                </p>
+                {(() => {
+                  const nearby = findCrowdSurge([checkModal.blockedSegment]);
+                  if (!nearby) return null;
+                  return (
+                    <p className="route-check-modal__dispersal">
+                      附近 <strong>{nearby.locationName}</strong> 人流異常
+                      （{nearby.userCount.toLocaleString()} 人，成長率 {(nearby.growthRate * 100).toFixed(0)}%），
+                      建議引導人潮改往其他方向疏散，避免在事故路口周邊聚集停留。
+                    </p>
+                  );
+                })()}
+                <button className="route-planner__btn" onClick={closeModal}>知道了</button>
+              </>
+            ) : checkModal.status === 'crowd-advisory' ? (
+              <>
+                <div className="route-check-modal__icon route-check-modal__icon--warn">⚠</div>
+                <h3>沿途人潮異常，建議分流</h3>
+                <p>
+                  <strong>{checkModal.spot.locationName}</strong> 目前人潮異常
+                  （{checkModal.spot.userCount.toLocaleString()} 人，成長率 {(checkModal.spot.growthRate * 100).toFixed(0)}%）。
+                </p>
+                <ul className="route-check-modal__advisory-list">
+                  <li>經過 {checkModal.spot.locationName} 周邊時，建議提前出發或錯開尖峰時段</li>
+                  <li>可考慮改搭捷運／公車分流，避開該站周邊路口聚集</li>
+                  <li>若步行經過，建議改由鄰近路口繞行，不要在該站出入口停留</li>
+                </ul>
                 <button className="route-planner__btn" onClick={closeModal}>知道了</button>
               </>
             ) : (

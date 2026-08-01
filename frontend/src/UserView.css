@@ -83,6 +83,11 @@
 }
 
 @media (max-width: 900px) {
+  .user-view {
+    /* 側邊欄在窄螢幕下改成疊在地圖下方（非並排），不再佔用右側寬度，
+       抽籤按鈕的右側偏移要跟著改回貼齊視窗右下角，不然會卡在畫面中間。 */
+    --fortune-trigger-right: var(--space-6);
+  }
   .user-view__body {
     grid-template-columns: 1fr;
     grid-template-rows: 1fr auto;
