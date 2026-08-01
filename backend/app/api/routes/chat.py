@@ -9,10 +9,75 @@ from app.api.dependencies import get_llm_service
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
+def _extract_timestamp_from_message(message: str, available_timestamps: list) -> str | None:
+    """
+    Try to extract a timestamp reference from the user's actual question
+    (not the frontend-injected context prefix) and match it to the closest
+    available timestamp in the dataset.
+    """
+    import re
+
+    # Strip the frontend context prefix like "[當前時間：2026-05-20 23:15，關注路段：...]"
+    # The user's actual question starts after the ]\n
+    actual_message = message
+    if message.startswith("[") and "]\n" in message:
+        actual_message = message.split("]\n", 1)[1]
+
+    # Match patterns like "21:30", "21:00", "2026-05-20 21:30"
+    time_patterns = [
+        r"(\d{4}-\d{2}-\d{2}\s+\d{1,2}:\d{2})",  # full datetime
+        r"(\d{1,2}:\d{2})",  # just time HH:MM
+    ]
+
+    for pattern in time_patterns:
+        match = re.search(pattern, actual_message)
+        if match:
+            time_str = match.group(1)
+            # If it's just HH:MM, try to find matching timestamp
+            if len(time_str) <= 5:
+                # Pad hour if needed
+                if len(time_str) == 4:
+                    time_str = "0" + time_str
+                matches = [ts for ts in available_timestamps if time_str in ts]
+                if matches:
+                    return matches[0]
+            else:
+                # Full datetime — find exact or closest match
+                if time_str in available_timestamps:
+                    return time_str
+                matches = [ts for ts in available_timestamps if time_str in ts]
+                if matches:
+                    return matches[0]
+
+    # If user didn't mention a specific time, check if the frontend context has one
+    # and use it as the "current time" reference
+    if message.startswith("[") and "]\n" in message:
+        prefix = message.split("]\n", 1)[0]
+        for pattern in time_patterns:
+            match = re.search(pattern, prefix)
+            if match:
+                time_str = match.group(1)
+                if len(time_str) <= 5:
+                    if len(time_str) == 4:
+                        time_str = "0" + time_str
+                    matches = [ts for ts in available_timestamps if time_str in ts]
+                    if matches:
+                        return matches[0]
+                else:
+                    if time_str in available_timestamps:
+                        return time_str
+                    matches = [ts for ts in available_timestamps if time_str in ts]
+                    if matches:
+                        return matches[0]
+
+    return None
+
+
 def _build_realtime_context(message: str) -> str:
     """
-    Build a concise summary of current traffic/crowd data relevant to the question.
-    This gives the LLM real data to base answers on.
+    Build a concise summary of traffic/crowd data relevant to the question.
+    If the user mentions a specific time, show data for that timestamp.
+    Otherwise show the latest data.
     """
     try:
         from app.data.repository import repository
@@ -20,38 +85,84 @@ def _build_realtime_context(message: str) -> str:
 
         parts = []
 
-        # Get traffic data — summarize latest timestamp
+        # Get traffic data
         traffic_df = repository.get_traffic_flow_df()
         if not traffic_df.empty:
-            latest_ts = traffic_df["Timestamp"].max()
-            latest = traffic_df[traffic_df["Timestamp"] == latest_ts]
-            high_sat = latest[latest["Saturation_Score"] >= 0.80].sort_values(
-                "Saturation_Score", ascending=False
-            )
-            if not high_sat.empty:
-                lines = [f"[即時車流數據 - {latest_ts}] 飽和度 >= 80% 路段："]
-                for _, row in high_sat.iterrows():
-                    lines.append(
-                        f"  - {row['Road_Name']} ({row['Segment_ID']}): "
-                        f"飽和度 {row['Saturation_Score']:.2f}, "
-                        f"車速 {row['Avg_Speed']:.0f} km/h, "
-                        f"車輛數 {row['Vehicle_Count']}"
-                    )
-                parts.append("\n".join(lines))
-            else:
-                parts.append(f"[即時車流數據 - {latest_ts}] 所有路段飽和度正常 (< 0.80)")
+            all_timestamps = sorted(traffic_df["Timestamp"].unique().tolist())
 
-        # Get crowd data — summarize latest timestamp
+            # Determine which timestamp to focus on
+            target_ts = _extract_timestamp_from_message(message, all_timestamps)
+            latest_ts = traffic_df["Timestamp"].max()
+
+            if target_ts:
+                # User asked about a specific time — show that timestamp's data
+                ts_data = traffic_df[traffic_df["Timestamp"] == target_ts]
+                high_sat = ts_data[ts_data["Saturation_Score"] >= 0.80].sort_values(
+                    "Saturation_Score", ascending=False
+                )
+                if not high_sat.empty:
+                    lines = [f"[車流數據 - {target_ts}] 飽和度 >= 80% 路段："]
+                    for _, row in high_sat.iterrows():
+                        sat = row["Saturation_Score"]
+                        level = "A 級 (癱瘓)" if sat >= 0.95 else "B 級 (壅擠)"
+                        lines.append(
+                            f"  - {row['Road_Name']} ({row['Segment_ID']}): "
+                            f"飽和度 {sat:.2f} [{level}], "
+                            f"車速 {row['Avg_Speed']:.0f} km/h, "
+                            f"車輛數 {int(row['Vehicle_Count'])}, "
+                            f"狀態 {row['Lane_Status']}"
+                        )
+                    parts.append("\n".join(lines))
+                else:
+                    parts.append(f"[車流數據 - {target_ts}] 所有路段飽和度正常 (< 0.80)")
+
+                # Also show latest for comparison if different
+                if target_ts != latest_ts:
+                    latest_data = traffic_df[traffic_df["Timestamp"] == latest_ts]
+                    latest_high = latest_data[latest_data["Saturation_Score"] >= 0.80]
+                    if not latest_high.empty:
+                        lines = [f"[最新車流數據 - {latest_ts}] 飽和度 >= 80% 路段："]
+                        for _, row in latest_high.sort_values("Saturation_Score", ascending=False).iterrows():
+                            lines.append(
+                                f"  - {row['Road_Name']} ({row['Segment_ID']}): 飽和度 {row['Saturation_Score']:.2f}"
+                            )
+                        parts.append("\n".join(lines))
+                    else:
+                        parts.append(f"[最新車流數據 - {latest_ts}] 所有路段飽和度已恢復正常")
+            else:
+                # No specific time mentioned — show latest
+                latest = traffic_df[traffic_df["Timestamp"] == latest_ts]
+                high_sat = latest[latest["Saturation_Score"] >= 0.80].sort_values(
+                    "Saturation_Score", ascending=False
+                )
+                if not high_sat.empty:
+                    lines = [f"[即時車流數據 - {latest_ts}] 飽和度 >= 80% 路段："]
+                    for _, row in high_sat.iterrows():
+                        sat = row["Saturation_Score"]
+                        level = "A 級 (癱瘓)" if sat >= 0.95 else "B 級 (壅擠)"
+                        lines.append(
+                            f"  - {row['Road_Name']} ({row['Segment_ID']}): "
+                            f"飽和度 {sat:.2f} [{level}], "
+                            f"車速 {row['Avg_Speed']:.0f} km/h, "
+                            f"車輛數 {int(row['Vehicle_Count'])}"
+                        )
+                    parts.append("\n".join(lines))
+                else:
+                    parts.append(f"[即時車流數據 - {latest_ts}] 所有路段飽和度正常 (< 0.80)")
+
+        # Get crowd data
         crowd_df = repository.get_crowd_density_df()
         if not crowd_df.empty:
-            latest_ts = crowd_df["Timestamp"].max()
-            latest = crowd_df[crowd_df["Timestamp"] == latest_ts]
-            # Show high-growth or high-count stations
-            notable = latest[
-                (latest["Growth_Rate"] > 0.20) | (latest["User_Count"] > 20000)
+            all_ts = sorted(crowd_df["Timestamp"].unique().tolist())
+            target_ts = _extract_timestamp_from_message(message, all_ts)
+            use_ts = target_ts if target_ts else crowd_df["Timestamp"].max()
+
+            ts_data = crowd_df[crowd_df["Timestamp"] == use_ts]
+            notable = ts_data[
+                (ts_data["Growth_Rate"] > 0.20) | (ts_data["User_Count"] > 20000)
             ]
             if not notable.empty:
-                lines = [f"[即時人流數據 - {latest_ts}] 需關注站點："]
+                lines = [f"[人流數據 - {use_ts}] 需關注站點："]
                 for _, row in notable.iterrows():
                     lines.append(
                         f"  - {row['Location_Name']} ({row['BS_ID']}): "
@@ -61,20 +172,32 @@ def _build_realtime_context(message: str) -> str:
                     )
                 parts.append("\n".join(lines))
 
+            # Always show roaming data for Article 6 detection
+            roaming_high = ts_data[ts_data["Roaming_User_Pct"] >= 0.30]
+            if not roaming_high.empty:
+                lines = [f"[漫遊率警報 - {use_ts}] Roaming >= 30% (觸發 SOP 第 6 條)："]
+                for _, row in roaming_high.iterrows():
+                    lines.append(
+                        f"  - {row['Location_Name']} ({row['BS_ID']}): 漫遊率 {row['Roaming_User_Pct']:.0%}"
+                    )
+                parts.append("\n".join(lines))
+
         # Get active incidents
         incidents = repository.get_live_incidents_raw()
         if incidents:
-            lines = ["[即時事件]"]
+            lines = ["[突發事件]"]
             for inc in incidents:
                 lines.append(
-                    f"  - [{inc.get('severity')}] {inc.get('location')}: "
-                    f"{inc.get('description')} (狀態: {inc.get('status')})"
+                    f"  - [{inc.get('severity')}] {inc.get('location')} "
+                    f"(affected: {inc.get('affected_segment')}): "
+                    f"{inc.get('description')} "
+                    f"[status={inc.get('status')}, type={inc.get('type')}]"
                 )
             parts.append("\n".join(lines))
 
         return "\n\n".join(parts) if parts else ""
-    except Exception:
-        return ""
+    except Exception as e:
+        return f"[數據載入錯誤: {str(e)}]"
 
 
 @router.post("/", response_model=ChatResponse)
