@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion';
 import type { AlertBanner } from '../types';
 import './AlertBanner.css';
 
@@ -8,26 +7,29 @@ interface AlertBannerProps {
 }
 
 export default function AlertBannerComponent({ alert, onDismiss }: AlertBannerProps) {
-  const levelClass = alert.level === 'A' ? 'alert-banner-critical' : 'alert-banner-warning';
+  const statusClass = alert.level === 'A' ? 'is-a' : 'is-b';
 
   return (
-    <motion.div
-      className={`alert-banner ${levelClass}`}
-      initial={{ opacity: 0, y: -20, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: -10 }}
-      transition={{ duration: 0.3, type: 'spring', stiffness: 300 }}
+    <div
+      className={`alert status-rail ${statusClass}`}
+      role="alert"
+      aria-live="polite"
     >
-      <div className="alert-banner-content">
-        <div className="alert-banner-title">{alert.title}</div>
-        <div className="alert-banner-message">{alert.message}</div>
-        {alert.sopArticle && (
-          <span className="badge badge-info alert-sop">{alert.sopArticle}</span>
-        )}
+      <div className="alert__level num">{alert.level}</div>
+
+      <div className="alert__body">
+        <div className="alert__title">{alert.title}</div>
+        <p className="alert__message">{alert.message}</p>
       </div>
-      <button className="alert-dismiss-btn" onClick={onDismiss} title="關閉">
-        ✕
-      </button>
-    </motion.div>
+
+      <div className="alert__aside">
+        {alert.sopArticle && (
+          <span className="badge alert__sop">{alert.sopArticle}</span>
+        )}
+        <button className="alert__close" onClick={onDismiss} aria-label="關閉警報">
+          ✕
+        </button>
+      </div>
+    </div>
   );
 }

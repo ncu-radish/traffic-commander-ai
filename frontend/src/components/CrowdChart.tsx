@@ -1,126 +1,172 @@
 import ReactECharts from 'echarts-for-react';
 import type { CrowdDensity } from '../types';
+import { chart, level, series as palette, threshold, font } from '../theme/tokens';
 
 interface CrowdChartProps {
   crowdData: CrowdDensity[];
   currentTimestamp: string;
 }
 
+/** BL17 sits at index 1 so the SOP 第 3 條 threshold attaches to it. */
 const KEY_STATIONS = [
-  { id: 'BS_TPE_DOME', name: '大巨蛋', color: '#f43f5e' },
-  { id: 'BS_MRT_BL17', name: 'BL17 國父紀念館站', color: '#00d4ff' },
-  { id: 'BS_MRT_BL18', name: 'BL18 市政府站', color: '#22c55e' },
-  { id: 'BS_XY_VIESHOW', name: '信義威秀', color: '#a78bfa' },
-  { id: 'BS_TPE_101', name: '台北101', color: '#f59e0b' },
+  { id: 'BS_TPE_DOME', name: '大巨蛋' },
+  { id: 'BS_MRT_BL17', name: 'BL17 國父紀念館' },
+  { id: 'BS_MRT_BL18', name: 'BL18 市政府' },
+  { id: 'BS_XY_VIESHOW', name: '信義威秀' },
+  { id: 'BS_TPE_101', name: '台北 101' },
 ];
+
+const BL17_INDEX = 1;
 
 export default function CrowdChart({ crowdData, currentTimestamp }: CrowdChartProps) {
   const timestamps = [...new Set(crowdData.map((d) => d.timestamp))].sort();
 
-  const series = KEY_STATIONS.map((station) => {
+  if (timestamps.length === 0) {
+    return (
+      <div className="state">
+        <span className="state__title">無人流資料</span>
+      </div>
+    );
+  }
+
+  const clockLabels = timestamps.map((t) => t.split(' ')[1]);
+  const currentIdx = timestamps.indexOf(currentTimestamp);
+
+  const seriesData = KEY_STATIONS.map((station, i) => {
+    const color = palette[i % palette.length];
     const stationData = crowdData.filter((d) => d.bsId === station.id);
-    const data = timestamps.map((ts) => {
-      const found = stationData.find((d) => d.timestamp === ts);
-      return found ? found.userCount : null;
-    });
 
     return {
       name: station.name,
       type: 'line' as const,
       smooth: true,
+      smoothMonotone: 'x' as const,
       symbol: 'circle',
-      symbolSize: 4,
-      data,
-      lineStyle: { color: station.color, width: 2 },
-      itemStyle: { color: station.color },
-      areaStyle: {
-        color: {
-          type: 'linear' as const,
-          x: 0, y: 0, x2: 0, y2: 1,
-          colorStops: [
-            { offset: 0, color: station.color + '25' },
-            { offset: 1, color: station.color + '05' },
-          ],
-        },
-      },
+      symbolSize: 3,
+      showSymbol: false,
+      // Signalling samples are irregular; don't bridge missing points.
+      connectNulls: false,
+      data: timestamps.map((ts) => {
+        const found = stationData.find((d) => d.timestamp === ts);
+        return found ? found.userCount : null;
+      }),
+      lineStyle: { color, width: 1.6 },
+      itemStyle: { color },
+      emphasis: { focus: 'series' as const, lineStyle: { width: 2.4 } },
     };
   });
 
-  // SOP Article 3 threshold line for BL17
-  const markLines = {
+  /** SOP 第 3 條 — BL17 headcount trigger. */
+  const thresholdLine = {
     silent: true,
-    symbol: 'none',
-    lineStyle: { type: 'dashed' as const, width: 1 },
-    data: [
-      {
-        yAxis: 25000,
-        lineStyle: { color: '#ef444480' },
-        label: { formatter: 'SOP§3 25,000', color: '#ef4444', fontSize: 10 },
-      },
-    ],
+    symbol: 'none' as const,
+    lineStyle: { type: 'dashed' as const, width: 1, color: level.a, opacity: 0.5 },
+    label: {
+      formatter: 'SOP§3 25k',
+      color: level.a,
+      fontSize: 9,
+      fontFamily: font.mono,
+      position: 'insideEndTop' as const,
+    },
+    data: [{ yAxis: threshold.crowdBL17 }],
   };
 
-  const currentIdx = timestamps.indexOf(currentTimestamp);
+  const cursorBand =
+    currentIdx >= 0
+      ? {
+          silent: true,
+          data: [
+            [
+              {
+                xAxis: clockLabels[currentIdx],
+                itemStyle: { color: chart.cursorBand },
+              },
+              {
+                xAxis: clockLabels[Math.min(currentIdx + 1, clockLabels.length - 1)],
+              },
+            ],
+          ],
+        }
+      : undefined;
 
   const option = {
-    backgroundColor: 'transparent',
+    backgroundColor: chart.bg,
+    animationDuration: 300,
+    textStyle: { fontFamily: font.sans },
     tooltip: {
       trigger: 'axis' as const,
-      backgroundColor: 'rgba(15, 22, 41, 0.95)',
-      borderColor: 'rgba(255, 255, 255, 0.1)',
-      textStyle: { color: '#e2e8f0', fontSize: 12 },
-      formatter: (params: Array<{ seriesName: string; value: number | null; marker: string }>) => {
-        const lines = params
-          .filter((p) => p.value !== null)
-          .map((p) => `${p.marker} ${p.seriesName}: ${(p.value ?? 0).toLocaleString()} 人`);
-        return lines.join('<br/>');
+      ...chart.tooltip,
+      axisPointer: {
+        type: 'line' as const,
+        lineStyle: { color: chart.axisLine, width: 1 },
+      },
+      formatter: (params: Array<{ seriesName: string; value: number | null; color: string; axisValue: string }>) => {
+        const rows = params
+          .filter((p) => p.value !== null && p.value !== undefined)
+          .sort((a, b) => (b.value ?? 0) - (a.value ?? 0))
+          .map(
+            (p) => `<div style="display:flex;align-items:center;gap:6px;">
+              <span style="width:6px;height:6px;border-radius:50%;background:${p.color}"></span>
+              <span style="flex:1">${p.seriesName}</span>
+              <span style="font-variant-numeric:tabular-nums;font-weight:600">${(p.value ?? 0).toLocaleString()}</span>
+            </div>`
+          );
+
+        if (rows.length === 0) return '';
+        const head = `<div style="font-size:10px;color:${chart.axisLabel};margin-bottom:4px">${params[0].axisValue}</div>`;
+        return head + rows.join('');
       },
     },
     legend: {
       data: KEY_STATIONS.map((s) => s.name),
-      textStyle: { color: '#94a3b8', fontSize: 11 },
+      textStyle: { color: chart.legendLabel, fontSize: 10 },
+      inactiveColor: '#4E5057',
       top: 0,
-      itemWidth: 16,
-      itemHeight: 3,
+      itemWidth: 12,
+      itemHeight: 2,
+      itemGap: 10,
+      icon: 'roundRect',
     },
-    grid: { left: 60, right: 20, top: 40, bottom: 30 },
+    grid: { left: 38, right: 12, top: 28, bottom: 26 },
     xAxis: {
       type: 'category' as const,
-      data: timestamps.map((t) => t.split(' ')[1]),
-      axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
-      axisLabel: { color: '#64748b', fontSize: 10, rotate: 45 },
+      data: clockLabels,
+      boundaryGap: false,
+      axisLine: { lineStyle: { color: chart.axisLine } },
+      axisTick: { show: false },
+      axisLabel: {
+        color: chart.axisLabel,
+        fontSize: 9,
+        fontFamily: font.mono,
+        interval: Math.max(0, Math.floor(clockLabels.length / 7) - 1),
+      },
       splitLine: { show: false },
     },
     yAxis: {
       type: 'value' as const,
-      axisLine: { lineStyle: { color: 'rgba(255,255,255,0.1)' } },
+      axisLine: { show: false },
+      axisTick: { show: false },
       axisLabel: {
-        color: '#64748b',
-        fontSize: 10,
-        formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v,
+        color: chart.axisLabel,
+        fontSize: 9,
+        fontFamily: font.mono,
+        formatter: (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v}`),
       },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.05)' } },
+      splitLine: { lineStyle: { color: chart.splitLine } },
     },
-    series: series.map((s, idx) => ({
+    series: seriesData.map((s, idx) => ({
       ...s,
-      markLine: idx === 1 ? markLines : undefined, // BL17 is index 1
-      markArea: currentIdx >= 0 && idx === 0
-        ? {
-            silent: true,
-            data: [[
-              { xAxis: timestamps[currentIdx]?.split(' ')[1], itemStyle: { color: 'rgba(0,212,255,0.08)' } },
-              { xAxis: timestamps[Math.min(currentIdx + 1, timestamps.length - 1)]?.split(' ')[1] },
-            ]],
-          }
-        : undefined,
+      markLine: idx === BL17_INDEX ? thresholdLine : undefined,
+      markArea: idx === 0 ? cursorBand : undefined,
     })),
   };
 
   return (
     <ReactECharts
       option={option}
-      style={{ height: 280 }}
+      style={{ height: 190 }}
       opts={{ renderer: 'canvas' }}
+      notMerge
     />
   );
 }

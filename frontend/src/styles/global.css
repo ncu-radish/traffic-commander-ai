@@ -1,12 +1,10 @@
-/* ============================================
-   Traffic Commander AI — Global Styles
-   Reset, Base Styles, Animations & Utilities
-   ============================================ */
+/* ═══════════════════════════════════════════════════════════════
+   Traffic Commander AI — Reset, base, motion
+   ═══════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 @import './variables.css';
 
-/* ── CSS Reset ── */
+/* ─── Reset ───────────────────────────────────────────────────── */
 *,
 *::before,
 *::after {
@@ -15,213 +13,187 @@
   padding: 0;
 }
 
-html {
+html,
+body {
   height: 100%;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
 }
 
 body {
-  height: 100%;
-  background-color: var(--color-bg-primary);
-  font-family: var(--font-family);
+  font-family: var(--font-sans);
   font-size: var(--text-base);
-  line-height: var(--line-height-normal);
-  color: var(--color-text-primary);
-  overflow-x: hidden;
+  line-height: var(--leading);
+  color: var(--text-primary);
+  background: var(--surface-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  /* The dashboard owns its own scroll regions. */
+  overflow: hidden;
 }
 
 #root {
-  min-height: 100vh;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-img,
-picture,
-video,
-canvas,
-svg {
+h1, h2, h3, h4 {
+  font-weight: 600;
+  line-height: var(--leading-tight);
+  color: var(--text-primary);
+}
+
+img, picture, video, canvas, svg {
   display: block;
   max-width: 100%;
 }
 
-input,
-button,
-textarea,
-select {
+input, button, textarea, select {
   font: inherit;
   color: inherit;
 }
 
-a {
-  color: var(--color-accent-cyan);
-  text-decoration: none;
-  transition: color var(--transition-fast);
-}
-
-a:hover {
-  color: var(--color-accent-cyan-bright);
-}
-
-ul,
-ol {
+ul, ol {
   list-style: none;
 }
 
-/* ── Custom Scrollbar ── */
+a {
+  color: var(--accent-bright);
+  text-decoration: none;
+  transition: color var(--ease);
+}
+
+a:hover {
+  color: var(--text-primary);
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--text-primary);
+}
+
+/* ─── Scrollbars: present but recessive ───────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(10, 14, 26, 0.5);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 212, 255, 0.25);
-  border-radius: var(--radius-full);
-  transition: background var(--transition-fast);
+  background: var(--line);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 212, 255, 0.45);
+  background: var(--line-strong);
+  background-clip: content-box;
 }
 
-/* Firefox scrollbar */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 212, 255, 0.25) rgba(10, 14, 26, 0.5);
+/* ═══════════════════════════════════════════════════════════════
+   Motion — slow, low-amplitude, non-distracting
+
+   Nothing flashes. Nothing blooms. An operator stares at this for
+   hours; movement is reserved for state that actually changed.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Steady presence indicator. 2.6s so it reads as alive, not urgent. */
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
 }
 
-/* ── Selection ── */
-::selection {
-  background: rgba(0, 212, 255, 0.3);
-  color: var(--color-text-primary);
-}
-
-/* ── Keyframe Animations ── */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes slideUp {
-  from {
-    transform: translateY(20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-@keyframes slideInRight {
-  from {
-    transform: translateX(20px);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
-}
-
-@keyframes glow {
-  0%,
-  100% {
-    box-shadow: 0 0 8px rgba(0, 212, 255, 0.3);
-  }
-  50% {
-    box-shadow: 0 0 20px rgba(0, 212, 255, 0.6);
-  }
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
+/* Incident locator on the map. Slow single expansion, fully faded
+   before it repeats — no strobing. */
+@keyframes locate {
+  0%   { transform: scale(0.6); opacity: 0.55; }
+  70%  { transform: scale(2.1); opacity: 0; }
+  100% { transform: scale(2.1); opacity: 0; }
 }
 
 @keyframes spin {
-  from {
-    transform: rotate(0deg);
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Draws a route on the map. */
+@keyframes trace {
+  from { stroke-dashoffset: 200; }
+  to   { stroke-dashoffset: 0; }
+}
+
+.animate-rise    { animation: rise var(--ease-slow) both; }
+.animate-fade-in { animation: fadeIn var(--ease) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
-  to {
-    transform: rotate(360deg);
-  }
 }
 
-/* ── Status Utility Classes ── */
-.status-normal {
-  color: var(--color-accent-green);
+/* ═══════════════════════════════════════════════════════════════
+   Utilities
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Every numeric readout: fixed-width digits so values don't jitter
+   as the timeline advances. */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
 
-.status-congested,
-.status-warning {
-  color: var(--color-accent-amber);
+.mono            { font-family: var(--font-mono); }
+.text-secondary  { color: var(--text-secondary); }
+.text-muted      { color: var(--text-muted); }
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.status-critical,
-.status-danger {
-  color: var(--color-accent-red);
+.scroll-y {
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
 }
 
-.status-blocked {
-  color: #b91c1c;
+.divider {
+  height: 1px;
+  background: var(--line-faint);
+  border: 0;
+  margin: var(--space-3) 0;
 }
 
-/* Status dot indicators */
-.status-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.status-dot-normal {
-  background: var(--color-accent-green);
-  box-shadow: 0 0 8px rgba(34, 197, 94, 0.5);
-}
-
-.status-dot-warning {
-  background: var(--color-accent-amber);
-  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
-  animation: pulse 2s ease-in-out infinite;
-}
-
-.status-dot-critical {
-  background: var(--color-accent-red);
-  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-
-.status-dot-blocked {
-  background: #b91c1c;
-  box-shadow: 0 0 8px rgba(185, 28, 28, 0.5);
-  animation: pulse 0.8s ease-in-out infinite;
-}
-
-/* ── General Utilities ── */
+.sr-only,
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -232,22 +204,4 @@ ol {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-.truncate {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.animate-fade-in {
-  animation: fadeIn var(--transition-normal) ease forwards;
-}
-
-.animate-slide-up {
-  animation: slideUp var(--transition-slow) ease forwards;
-}
-
-.animate-slide-in-right {
-  animation: slideInRight var(--transition-slow) ease forwards;
 }

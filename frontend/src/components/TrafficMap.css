@@ -1,31 +1,278 @@
-.map-popup {
-  color: #1a1f3a;
-  font-size: 0.85rem;
+/* ═══════════════════════════════════════════════════════════════
+   Map — matte basemap, muted geometry, quiet locators
+
+   CARTO ships no matte-black style, so the look is composed here:
+   `dark_nolabels` supplies terrain, a CSS filter desaturates and
+   darkens it to sit inside the palette, and `dark_only_labels`
+   rides on top unfiltered so type stays legible.
+   ═══════════════════════════════════════════════════════════════ */
+
+.leaflet-container {
+  background: var(--map-frame);
+  font-family: var(--font-sans);
+}
+
+/* Terrain: pull the blue out of CARTO's dark tiles and flatten
+   contrast so roads read as soft grey rather than glowing lines. */
+.tile-base {
+  filter: saturate(0.35) brightness(0.78) contrast(0.92);
+}
+
+/* Type layer stays unfiltered, held back on opacity instead. */
+.tile-labels {
+  opacity: 0.55;
+  filter: saturate(0) brightness(1.05);
+}
+
+/* ─── Selected segment ────────────────────────────────────────── */
+.segment--selected {
+  filter: brightness(1.25);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Incident locator
+
+   One slow expansion every 2.6s, fully faded before it repeats.
+   No strobing, no coloured bloom.
+   ═══════════════════════════════════════════════════════════════ */
+.incident-marker {
+  position: relative;
+  width: 18px;
+  height: 18px;
+}
+
+.incident-marker__core,
+.incident-marker__ring {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  border-radius: 50%;
+}
+
+.incident-marker__core {
+  width: 9px;
+  height: 9px;
+  background: var(--level-a);
+  border: 1.5px solid rgba(18, 18, 20, 0.9);
+}
+
+.incident-marker__ring {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--level-a);
+  animation: locate 2.6s ease-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Legend — same matte panel language as the rails
+   ═══════════════════════════════════════════════════════════════ */
+.map-legend {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-3);
+  z-index: var(--z-overlay);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: rgba(18, 18, 20, 0.88);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow), var(--sheen-top);
+  pointer-events: none;
+}
+
+.map-legend__group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.map-legend__group + .map-legend__group {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line-faint);
+}
+
+.map-legend__title {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-disabled);
+  margin-bottom: 2px;
+}
+
+.map-legend__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.map-legend__swatch {
+  width: 16px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.map-legend__label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Popups — matte panel, not Leaflet's white default
+   ═══════════════════════════════════════════════════════════════ */
+.leaflet-popup-content-wrapper {
+  background: var(--surface-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+}
+
+.leaflet-popup-content {
+  margin: 0;
+  min-width: 200px;
+  font-size: var(--text-xs);
   line-height: 1.5;
 }
 
-.map-popup h4 {
-  margin: 0 0 6px 0;
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.map-popup p {
-  margin: 2px 0;
-}
-
-.incident-tag {
-  color: #ef4444;
-  font-weight: 600;
-  margin-top: 6px !important;
-}
-
-/* Override Leaflet defaults for dark theme */
-.leaflet-popup-content-wrapper {
-  border-radius: 10px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-}
-
 .leaflet-popup-tip {
+  background: var(--surface-panel);
+  border: 1px solid var(--line);
   box-shadow: none;
+}
+
+.leaflet-popup-close-button {
+  color: var(--text-disabled) !important;
+  padding: 6px 7px 0 0 !important;
+}
+
+.leaflet-popup-close-button:hover {
+  color: var(--text-secondary) !important;
+  background: transparent !important;
+}
+
+.map-popup {
+  padding: var(--space-3);
+}
+
+.map-popup__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line-faint);
+}
+
+.map-popup__name {
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.map-popup__id {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--text-disabled);
+}
+
+.map-popup__desc {
+  margin-bottom: var(--space-2);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+/* Two-column definition list keeps labels and values aligned. */
+.map-popup__grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px var(--space-3);
+  margin: 0;
+}
+
+.map-popup__grid dt {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.map-popup__grid dd {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.map-popup__sat {
+  font-weight: 600;
+}
+
+.map-popup__flag {
+  color: var(--level-b);
+  font-size: 9px;
+}
+
+.map-popup__muted {
+  color: var(--text-disabled) !important;
+}
+
+.map-popup__alert,
+.map-popup__route {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line-faint);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.map-popup__alert {
+  color: var(--level-a);
+}
+
+.map-popup__route {
+  color: var(--accent-bright);
+}
+
+.map-popup__route--secondary {
+  color: var(--text-secondary);
+}
+
+/* ─── Station tooltips ────────────────────────────────────────── */
+.leaflet-tooltip {
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  color: var(--text-secondary);
+  font-size: 10px;
+  padding: 2px 6px;
+}
+
+.leaflet-tooltip::before {
+  display: none;
+}
+
+/* ─── Zoom control, if re-enabled ─────────────────────────────── */
+.leaflet-control-zoom a {
+  background: var(--surface-panel);
+  border-color: var(--line);
+  color: var(--text-secondary);
+}
+
+.leaflet-control-zoom a:hover {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+
+@media (max-width: 1024px) {
+  .map-legend {
+    display: none;
+  }
 }

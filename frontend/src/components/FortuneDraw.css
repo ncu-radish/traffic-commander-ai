@@ -1,0 +1,470 @@
+/* Fortune draw widget — a red-and-rice-white temple fortune slip,
+   deliberately its own little ceremonial moment rather than matching
+   the app's dark glass chrome. Semantic tier color (good/fair/bad)
+   is used sparingly, only where it carries real meaning (tags, score). */
+
+.fortune-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  position: fixed;
+  right: var(--space-6);
+  bottom: var(--space-6);
+  z-index: var(--z-overlay);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: var(--surface-panel);
+  backdrop-filter: blur(12px);
+  color: var(--color-text-primary);
+  font-family: var(--font-family);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
+}
+.fortune-trigger:hover {
+  border-color: #d1483f;
+  box-shadow: 0 0 20px rgba(209, 72, 63, 0.35);
+  transform: translateY(-1px);
+}
+.fortune-trigger-icon {
+  font-size: var(--text-lg);
+  line-height: 1;
+  display: inline-block;
+  animation: fortune-icon-float 2.4s ease-in-out infinite;
+}
+@keyframes fortune-icon-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-3px) rotate(-6deg); }
+}
+
+.fortune-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: rgba(20, 8, 8, 0.66);
+  backdrop-filter: blur(6px);
+  padding: var(--space-10) var(--space-6);
+  animation: fortune-fade-in var(--transition-normal) ease;
+}
+@keyframes fortune-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── The card: rice-white paper, red ink & seal. ── */
+.fortune-card {
+  position: relative;
+  width: min(420px, 100%);
+  padding: 34px var(--space-6) var(--space-6);
+  border-radius: 6px;
+  background:
+    repeating-linear-gradient(0deg, rgba(180, 130, 70, 0.025) 0px, rgba(180, 130, 70, 0.025) 1px, transparent 1px, transparent 3px),
+    linear-gradient(175deg, #fffdf9 0%, #f8efdd 100%);
+  color: #402420;
+  text-align: center;
+  font-family: var(--font-family);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(209, 72, 63, 0.18);
+  animation: fortune-pop 620ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* 雙線框：外紅內金，做出傳統請帖/獎狀的裱框感 */
+.fortune-card::before {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border: 1.5px solid rgba(209, 72, 63, 0.4);
+  pointer-events: none;
+}
+.fortune-card::after {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border: 1px solid rgba(180, 138, 46, 0.45);
+  pointer-events: none;
+}
+
+/* 回紋飾帶：頂部與底部各一條，古風邊飾 */
+.fortune-band {
+  height: 9px;
+  margin: 0 auto var(--space-6);
+  max-width: 220px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='9'%3E%3Cpath d='M0 9 L0 3 L4 3 L4 6 L8 6 L8 3 L12 3 L12 6 L16 6' stroke='%23c0392b' stroke-width='1' fill='none' opacity='0.55'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
+  background-position: center;
+}
+.fortune-band--bottom {
+  margin: var(--space-6) auto 0;
+}
+
+.fortune-card--drawing,
+.fortune-card--revealed {
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+@keyframes fortune-pop {
+  from { opacity: 0; transform: scale(0.85) translateY(16px); }
+  60% { transform: scale(1.02) translateY(-2px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.fortune-dismiss {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(209, 72, 63, 0.3);
+  background: transparent;
+  color: #a85248;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 1;
+  transition: color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+}
+.fortune-dismiss:hover {
+  color: #d1483f;
+  border-color: #d1483f;
+  transform: rotate(90deg);
+}
+
+.fortune-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.fortune-eyebrow {
+  font-size: var(--text-xs);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: #b56b5f;
+  margin-bottom: var(--space-2);
+}
+
+/* ── Seal: always the lucky red stamp — the tier is told by the
+   character & label, not by recoloring the stamp itself. ── */
+/* 方印造型（篆刻印章感）：內縮一圈細白邊做出刻印的浮雕層次 */
+.fortune-seal {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  font-weight: 700;
+  flex: none;
+  background: radial-gradient(circle at 32% 28%, #e2584d, #a8332a);
+  color: #fff8ee;
+  box-shadow: 0 2px 6px rgba(182, 54, 44, 0.4);
+}
+.fortune-seal::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(255, 248, 238, 0.55);
+  border-radius: 5px;
+  pointer-events: none;
+}
+
+.fortune-seal--big {
+  width: 108px;
+  height: 108px;
+  border-radius: 18px;
+  font-size: 2.75rem;
+  margin: var(--space-2) 0 var(--space-5);
+  box-shadow:
+    0 0 0 6px rgba(209, 72, 63, 0.1),
+    0 12px 30px rgba(182, 54, 44, 0.4);
+  animation: fortune-seal-in 680ms cubic-bezier(0.34, 1.56, 0.64, 1) both,
+             fortune-seal-wiggle 2.6s ease-in-out 680ms infinite;
+}
+.fortune-seal--big::after {
+  inset: 7px;
+  border-radius: 12px;
+}
+@keyframes fortune-seal-in {
+  0% { opacity: 0; transform: scale(0.3) rotate(-25deg); }
+  70% { transform: scale(1.08) rotate(6deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+@keyframes fortune-seal-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(2.5deg); }
+}
+
+.fortune-seal--small {
+  width: 44px;
+  height: 44px;
+  font-size: var(--text-lg);
+}
+
+.fortune-label {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #b6362c;
+}
+
+.fortune-primary-btn {
+  margin-top: var(--space-6);
+  padding: var(--space-3) var(--space-8);
+  border: none;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(180deg, #e2584d, #b6362c);
+  color: #fff8ee;
+  font-family: var(--font-family);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(182, 54, 44, 0.4);
+  animation: fortune-btn-pulse 1.8s ease-in-out infinite;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.fortune-primary-btn:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 12px 28px rgba(182, 54, 44, 0.5);
+  animation-play-state: paused;
+}
+@keyframes fortune-btn-pulse {
+  0%, 100% { box-shadow: 0 8px 22px rgba(182, 54, 44, 0.4); }
+  50% { box-shadow: 0 8px 26px rgba(182, 54, 44, 0.65), 0 0 0 6px rgba(209, 72, 63, 0.08); }
+}
+
+/* ── Drawing stage ── */
+.fortune-shaker {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 10px;
+  height: 72px;
+  margin-bottom: var(--space-5);
+}
+.fortune-shaker-stick {
+  width: 6px;
+  height: 56px;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #e2584d, #b6362c);
+  transform-origin: bottom center;
+  animation: fortune-shake 480ms ease-in-out infinite;
+}
+.fortune-shaker-stick:nth-child(2) { animation-delay: 80ms; height: 68px; }
+.fortune-shaker-stick:nth-child(3) { animation-delay: 160ms; height: 48px; }
+@keyframes fortune-shake {
+  0%, 100% { transform: rotate(-14deg) translateY(0); }
+  50% { transform: rotate(15deg) translateY(-4px); }
+}
+.fortune-drawing-label {
+  font-size: var(--text-sm);
+  color: #b56b5f;
+  letter-spacing: 0.08em;
+}
+
+/* ── Interpreted stage ── */
+.fortune-verdict {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  text-align: left;
+  width: 100%;
+  margin-bottom: var(--space-5);
+}
+.fortune-verdict-text { flex: 1; min-width: 0; }
+.fortune-verdict-headline {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: #402420;
+}
+.fortune-verdict-body {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  color: #6b4238;
+  line-height: var(--leading);
+}
+
+/* 籤詩直排：由右至左，仿真正籤詩書寫方式 */
+.fortune-poem--compact {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--space-4);
+  margin: 0 0 var(--space-6);
+  padding: var(--space-5) var(--space-4);
+  border-radius: var(--radius-md);
+  background: rgba(209, 72, 63, 0.05);
+  border: 1px dashed rgba(209, 72, 63, 0.25);
+}
+.fortune-poem-line {
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  font-size: var(--text-base);
+  line-height: 1.9;
+  letter-spacing: 0.35em;
+  font-weight: 600;
+  color: #6b2e26;
+}
+
+.fortune-section {
+  width: 100%;
+  text-align: left;
+  margin-bottom: var(--space-6);
+}
+.fortune-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a85248;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid rgba(209, 72, 63, 0.18);
+}
+.fortune-section-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(209, 72, 63, 0.25);
+  color: #b6857e;
+}
+
+.fortune-placeholder-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: #b6857e;
+  font-style: italic;
+}
+
+.fortune-fact-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3) var(--space-4);
+  margin: 0;
+}
+.fortune-fact--wide { grid-column: 1 / -1; }
+.fortune-fact dt {
+  font-size: var(--text-xs);
+  color: #a8776c;
+  margin-bottom: 2px;
+}
+.fortune-fact dd {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: #402420;
+  font-variant-numeric: tabular-nums;
+}
+
+.fortune-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.fortune-tag {
+  padding: 3px 12px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  border: 1px solid;
+  background: rgba(255, 255, 255, 0.5);
+}
+.fortune-tag--good { color: #1f8a4c; border-color: rgba(31, 138, 76, 0.4); }
+.fortune-tag--fair { color: #b3760f; border-color: rgba(179, 118, 15, 0.4); }
+.fortune-tag--bad  { color: #c0392b; border-color: rgba(192, 57, 43, 0.4); }
+
+.fortune-score-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+}
+.fortune-score-box {
+  flex: none;
+  width: 92px;
+  height: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.55);
+  border: 2px solid rgba(209, 72, 63, 0.25);
+}
+.fortune-score-num {
+  font-size: var(--text-2xl);
+  font-weight: 800;
+  color: #b6362c;
+  font-variant-numeric: tabular-nums;
+}
+.fortune-score-cap {
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.3;
+  text-align: center;
+  color: #a8776c;
+}
+.fortune-score-note {
+  margin: 0;
+  flex: 1;
+  font-size: var(--text-sm);
+  color: #6b4238;
+  line-height: var(--leading);
+}
+
+.fortune-suggestions {
+  margin: 0;
+  padding-left: 1.1em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.fortune-suggestions li {
+  font-size: var(--text-sm);
+  color: #6b4238;
+  line-height: var(--leading);
+}
+
+.fortune-close {
+  margin-top: var(--space-2);
+  width: 100%;
+  padding: var(--space-3);
+  border: 1.5px solid rgba(209, 72, 63, 0.35);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: #b6362c;
+  font-family: var(--font-family);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.fortune-close:hover {
+  background: rgba(209, 72, 63, 0.08);
+  transform: translateY(-1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fortune-overlay, .fortune-card, .fortune-seal--big, .fortune-shaker-stick,
+  .fortune-primary-btn, .fortune-trigger-icon { animation: none; }
+}
