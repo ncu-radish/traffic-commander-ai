@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { RoadSegment, LiveIncident } from '../types';
+import type { RoadSegment, LiveIncident, CrowdDensity } from '../types';
 import './RoutePlanner.css';
 
 const API_BASE = 'http://localhost:8000/api';
@@ -21,17 +21,35 @@ interface RoutePlannerProps {
   roadNetwork: RoadSegment[];
   activeIncidents: LiveIncident[];
   currentTimestamp: string;
+  crowdData: CrowdDensity[];
   /** 讓地圖把目前規劃出的路徑畫出來。 */
   onRouteChange?: (segmentIds: string[]) => void;
+  /** 使用者在地圖上點選位置後解析出的最近路段 id + 名稱；「定位」概念上是一個點，這只是拿最近的路段當路網圖的進入節點。 */
+  pickedStart?: { segmentId: string; name: string } | null;
+  /** 目前是否處於「點地圖設定位置」模式——用來切換按鈕文字、提示使用者去點地圖。 */
+  pickingActive?: boolean;
+  onRequestPick?: () => void;
+}
+
+/** SOP第3條的門檻：任一站點成長率>30%或人數>25,000，就有理由建議改搭大眾運輸。 */
+function isCrowdSurging(c: CrowdDensity): boolean {
+  return c.growthRate > 0.3 || c.userCount > 25000;
 }
 
 /**
  * 使用者導航模擬：起訖點選路段、算一條盡量避開壅塞/封閉路段的模擬路徑。
  * 不是精確導航——路網座標是近似值，用途是示範「路網重規劃」的多跳版本。
  */
-export default function RoutePlanner({ roadNetwork, activeIncidents, currentTimestamp, onRouteChange }: RoutePlannerProps) {
+export default function RoutePlanner({
+  roadNetwork, activeIncidents, currentTimestamp, crowdData, onRouteChange,
+  pickedStart, pickingActive, onRequestPick,
+}: RoutePlannerProps) {
   const [startId, setStartId] = useState('');
   const [endId, setEndId] = useState('');
+
+  useEffect(() => {
+    if (pickedStart) setStartId(pickedStart.segmentId);
+  }, [pickedStart]);
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [checkModal, setCheckModal] = useState<RouteCheckModal | null>(null);
@@ -135,6 +153,19 @@ export default function RoutePlanner({ roadNetwork, activeIncidents, currentTime
 
   const segmentName = (id: string) => roadNetwork.find((s) => s.segmentId === id)?.name ?? id;
 
+  // 路線沿途若有基地台人潮異常（SOP第3條門檻），提醒可以考慮改搭大眾運輸——
+  // 不是另外做一套多模式路線演算法，只是把已經有的人流資料變成一句實用建議。
+  const transitSuggestion = (() => {
+    if (!route?.reachable) return null;
+    const nearbyStationIds = new Set(
+      route.path.flatMap((segId) => roadNetwork.find((s) => s.segmentId === segId)?.nearbyStations ?? []),
+    );
+    if (nearbyStationIds.size === 0) return null;
+    const surging = crowdData.filter((c) => nearbyStationIds.has(c.bsId) && isCrowdSurging(c));
+    if (surging.length === 0) return null;
+    return surging[0];
+  })();
+
   return (
     <div className="route-planner glass-panel">
       <div className="glass-panel-header">
@@ -148,13 +179,19 @@ export default function RoutePlanner({ roadNetwork, activeIncidents, currentTime
 
       <div className="route-planner__row">
         <label>
-          目前位置（模擬）
-          <select value={startId} onChange={(e) => setStartId(e.target.value)}>
-            <option value="">請選擇</option>
-            {roadNetwork.map((s) => (
-              <option key={s.segmentId} value={s.segmentId}>{s.name}</option>
-            ))}
-          </select>
+          目前位置（點地圖上的一個點，取最近路段）
+          <div className="route-planner__position-row">
+            <span className="route-planner__position-value">
+              {startId ? segmentName(startId) : '尚未設定位置'}
+            </span>
+            <button
+              type="button"
+              className={`route-planner__pick-btn${pickingActive ? ' route-planner__pick-btn--active' : ''}`}
+              onClick={onRequestPick}
+            >
+              {pickingActive ? '請點擊地圖…' : '在地圖上點選位置'}
+            </button>
+          </div>
         </label>
         <label>
           目的地
@@ -186,6 +223,14 @@ export default function RoutePlanner({ roadNetwork, activeIncidents, currentTime
             ))}
           </div>
           <div className="route-planner__cost">模擬壅塞代價：{route.cost}</div>
+
+          {transitSuggestion && (
+            <div className="route-planner__transit-tip">
+              <strong>{transitSuggestion.locationName}</strong> 人潮異常
+              （{transitSuggestion.userCount.toLocaleString()} 人，成長率 {(transitSuggestion.growthRate * 100).toFixed(0)}%），
+              建議可考慮改搭大眾運輸，避開沿途人潮壅塞。
+            </div>
+          )}
         </div>
       )}
 

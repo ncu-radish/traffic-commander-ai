@@ -24,14 +24,32 @@ def _load_segments() -> List[Dict[str, Any]]:
         return json.load(f)
 
 
+JUNCTION_BACKUP_PENALTY = 3.0  # 路口回堵懲罰：跟封閉路段同一路口的路段，通過代價變高
+
+
 def build_graph(saturation_by_segment: Dict[str, float], blocked_segments: Optional[Set[str]] = None) -> nx.Graph:
     """把路網轉成圖：每個路段是一個節點，若兩路段互為 intersections（相交）則連一條邊。
     邊的權重 = 1 + 飽和度*5，飽和度越高代價越高，最短路徑演算法會盡量繞開。
     封閉路段直接不放進圖裡（而不是算完再過濾），演算法自然就不會選到。
+
+    路口回堵：封閉路段「本身」被移除只會影響真的要走那條路的人。但現實中路口
+    封閉會讓經過同一路口的其他方向車流回堵——例如光復南路在跟忠孝東路的路口封閉，
+    忠孝東路直行車流也會被影響，即使它不會轉進光復南路。所以額外對「與封閉路段
+    共用路口」的路段的邊加權，讓演算法有動機真的去繞開那個路口，而不是視而不見。
     """
     blocked = blocked_segments or set()
     segments = _load_segments()
     by_name = {s["name"]: s for s in segments}
+
+    junction_backup_ids: Set[str] = set()
+    for seg in segments:
+        if seg["segment_id"] not in blocked:
+            continue
+        for inter_name in seg.get("intersections", []):
+            inter_seg = by_name.get(inter_name)
+            if inter_seg:
+                junction_backup_ids.add(inter_seg["segment_id"])
+    junction_backup_ids -= blocked
 
     graph = nx.Graph()
     for seg in segments:
@@ -48,6 +66,8 @@ def build_graph(saturation_by_segment: Dict[str, float], blocked_segments: Optio
                 continue
             saturation = saturation_by_segment.get(seg["segment_id"], 0.5)
             weight = 1 + saturation * 5
+            if seg["segment_id"] in junction_backup_ids or inter_seg["segment_id"] in junction_backup_ids:
+                weight += JUNCTION_BACKUP_PENALTY
             graph.add_edge(seg["segment_id"], inter_seg["segment_id"], weight=weight)
 
     return graph

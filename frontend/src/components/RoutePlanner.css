@@ -20,6 +20,50 @@
   color: var(--text-secondary);
 }
 
+.route-planner__position-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.route-planner__position-value {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-input);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.route-planner__pick-btn {
+  flex: none;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+  font-family: var(--font-family);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.route-planner__pick-btn--active {
+  background: var(--level-a-soft);
+  border-color: var(--level-a-line);
+  color: var(--level-a);
+  animation: route-planner-pulse 1.2s ease-in-out infinite;
+}
+@keyframes route-planner-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
 .route-planner__row select {
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
@@ -94,6 +138,20 @@
   font-size: var(--text-xs);
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+.route-planner__transit-tip {
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--level-b-soft);
+  border: 1px solid var(--level-b-line);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading);
+}
+.route-planner__transit-tip strong {
+  color: var(--level-b);
 }
 
 /* ── 真正的彈出視窗，蓋在整個畫面上，不是側邊欄裡的小卡片 ── */

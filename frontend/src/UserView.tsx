@@ -26,6 +26,9 @@ export default function UserView({ onBack }: UserViewProps) {
   const [activeIncidents, setActiveIncidents] = useState<LiveIncident[]>([]);
   const [routePath, setRoutePath] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [pickingActive, setPickingActive] = useState(false);
+  const [pickedStart, setPickedStart] = useState<{ segmentId: string; name: string } | null>(null);
+  const [userPositionPoint, setUserPositionPoint] = useState<[number, number] | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -95,6 +98,12 @@ export default function UserView({ onBack }: UserViewProps) {
     });
   }, []);
 
+  const handleMapClick = useCallback((segmentId: string, name: string, lat: number, lng: number) => {
+    setPickedStart({ segmentId, name });
+    setUserPositionPoint([lat, lng]);
+    setPickingActive(false);
+  }, []);
+
   if (isLoading) {
     return <div className="user-view user-view--loading">載入資料中…</div>;
   }
@@ -116,6 +125,8 @@ export default function UserView({ onBack }: UserViewProps) {
             routePathIds={routePath}
             accidentHotspots={accidentHotspots}
             focusSegmentIds={focusSegmentIds}
+            onMapClick={pickingActive ? handleMapClick : undefined}
+            userPositionPoint={userPositionPoint}
           />
         </div>
 
@@ -124,7 +135,11 @@ export default function UserView({ onBack }: UserViewProps) {
             roadNetwork={roadNetwork}
             activeIncidents={activeIncidents}
             currentTimestamp={currentTimestamp}
+            crowdData={currentCrowd}
             onRouteChange={setRoutePath}
+            pickedStart={pickedStart}
+            pickingActive={pickingActive}
+            onRequestPick={() => setPickingActive(true)}
           />
           <IncidentPanel
             incidents={liveIncidents}
