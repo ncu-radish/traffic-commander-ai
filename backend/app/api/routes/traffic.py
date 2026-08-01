@@ -20,3 +20,7 @@ def get_road_network():
 def get_live_incidents():
     return repository.get_live_incidents()
 
+@router.get("/accident-hotspots")
+def get_accident_hotspots():
+    return repository.get_accident_hotspots()
+

@@ -1,6 +1,6 @@
 import { MapContainer, TileLayer, Polyline, Popup, CircleMarker, Marker, Tooltip } from 'react-leaflet';
 import L from 'leaflet';
-import type { TrafficSegment, RoadSegment, LiveIncident } from '../types';
+import type { TrafficSegment, RoadSegment, LiveIncident, AccidentHotspots } from '../types';
 import { road, saturationColor, saturationWeight, threshold } from '../theme/tokens';
 import './TrafficMap.css';
 
@@ -59,6 +59,17 @@ interface TrafficMapProps {
   primaryRouteId?: string | null;
   /** Secondary diversion routes. */
   secondaryRouteIds?: string[];
+  /** data.taipei 114年事故斑點圖，依路段比對後的統計。缺資料時該圖層直接不畫。 */
+  accidentHotspots?: AccidentHotspots | null;
+}
+
+/** 依事故數決定熱點圈的半徑，數量越多圈越大，而非固定大小的裝飾用圖示。 */
+function hotspotRadius(total: number): number {
+  return 5 + Math.min(14, Math.sqrt(total) * 2.2);
+}
+
+function segmentMidpoint(coords: [number, number][]): [number, number] {
+  return coords[Math.floor(coords.length / 2)];
 }
 
 export default function TrafficMap({
@@ -69,6 +80,7 @@ export default function TrafficMap({
   onSelectSegment,
   primaryRouteId,
   secondaryRouteIds = [],
+  accidentHotspots,
 }: TrafficMapProps) {
   const trafficLookup = new Map<string, TrafficSegment>();
   trafficData.forEach((t) => trafficLookup.set(t.segmentId, t));
@@ -199,7 +211,20 @@ export default function TrafficMap({
                         <dt>狀態</dt>
                         <dd>{traffic.laneStatus}</dd>
                       </>
-                    ) : (
+                    ) : null}
+                    {(() => {
+                      const hotspot = accidentHotspots?.segments[segment.segmentId];
+                      if (!hotspot || hotspot.total === 0) return null;
+                      return (
+                        <>
+                          <dt>事故熱點</dt>
+                          <dd className="num" style={{ color: road.blocked }}>
+                            {hotspot.total} 件（{accidentHotspots?.year}）
+                          </dd>
+                        </>
+                      );
+                    })()}
+                    {!hasReading && (
                       <>
                         <dt>讀數</dt>
                         <dd className="map-popup__muted">此時間點無資料</dd>
@@ -223,6 +248,34 @@ export default function TrafficMap({
             </Polyline>
           );
         })}
+
+        {/* ── Accident hotspots (data.taipei 114年事故斑點圖) ─── */}
+        {accidentHotspots &&
+          Object.entries(accidentHotspots.segments).map(([segId, hotspot]) => {
+            if (hotspot.total === 0) return null;
+            const coords = segmentCoordinates[segId];
+            if (!coords) return null;
+            return (
+              <CircleMarker
+                key={`hotspot-${segId}`}
+                center={segmentMidpoint(coords)}
+                radius={hotspotRadius(hotspot.total)}
+                pathOptions={{
+                  color: road.blocked,
+                  fillColor: road.blocked,
+                  fillOpacity: 0.18,
+                  weight: 1.5,
+                  opacity: 0.65,
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -6]} opacity={1}>
+                  <span>
+                    {hotspot.name} · {hotspot.total} 件事故（{accidentHotspots.year}）
+                  </span>
+                </Tooltip>
+              </CircleMarker>
+            );
+          })}
 
         {/* ── Base stations ──────────────────────────────────── */}
         {Object.entries(stationCoordinates).map(([bsId, pos]) => (

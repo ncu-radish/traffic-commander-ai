@@ -104,3 +104,18 @@ export interface AlertBanner {
   sopArticle?: string;
   dismissed: boolean;
 }
+
+export interface AccidentHotspotSegment {
+  name: string;
+  total: number;
+  a1Fatal: number;
+  a2Injury: number;
+}
+
+export interface AccidentHotspots {
+  source: string;
+  year: string;
+  method: string;
+  matchedTotal: number;
+  segments: Record<string, AccidentHotspotSegment>;
+}
