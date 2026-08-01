@@ -73,21 +73,21 @@ def _extract_timestamp_from_message(message: str, available_timestamps: list) ->
     return None
 
 
-def _snapshot_at(df, ts: str):
+def _snapshot_at(df, ts: str, id_col: str = "Segment_ID"):
     """
-    Latest reading per segment at or before `ts`.
+    Latest reading per entity (segment or station) at or before `ts`.
 
-    The traffic feed is sparse — most timestamps report only a handful of the
-    15 segments — so filtering on an exact timestamp would leave the rest of the
-    network looking unreported. Timestamps use a zero-padded
-    "YYYY-MM-DD HH:MM" format, so plain string comparison orders them correctly.
+    The data feeds are sparse — most timestamps report only a handful of
+    entities — so filtering on an exact timestamp would leave the rest looking
+    unreported. Timestamps use a zero-padded "YYYY-MM-DD HH:MM" format, so
+    plain string comparison orders them correctly.
     """
     if df.empty or ts is None:
         return df
     subset = df[df["Timestamp"] <= ts]
     if subset.empty:
         return subset
-    return subset.sort_values("Timestamp").groupby("Segment_ID", as_index=False).tail(1)
+    return subset.sort_values("Timestamp").groupby(id_col, as_index=False).tail(1)
 
 
 def _build_route_plan_context(
@@ -254,34 +254,41 @@ def _build_realtime_context(message: str) -> str:
         # Get crowd data
         crowd_df = repository.get_crowd_density_df()
         if not crowd_df.empty:
-            all_ts = sorted(crowd_df["Timestamp"].unique().tolist())
-            target_ts = _extract_timestamp_from_message(message, all_ts)
-            use_ts = target_ts if target_ts else crowd_df["Timestamp"].max()
+            # Use the same reference time as traffic for consistency.
+            # Apply snapshot logic so all stations have a reading.
+            crowd_snapshot = _snapshot_at(crowd_df, resolved_ts, id_col="BS_ID")
 
-            ts_data = crowd_df[crowd_df["Timestamp"] == use_ts]
-            notable = ts_data[
-                (ts_data["Growth_Rate"] > 0.20) | (ts_data["User_Count"] > 20000)
-            ]
-            if not notable.empty:
-                lines = [f"[人流數據 - {use_ts}] 需關注站點："]
-                for _, row in notable.iterrows():
-                    lines.append(
-                        f"  - {row['Location_Name']} ({row['BS_ID']}): "
-                        f"人數 {int(row['User_Count']):,}, "
-                        f"成長率 {row['Growth_Rate']:.0%}, "
-                        f"漫遊率 {row['Roaming_User_Pct']:.0%}"
-                    )
-                parts.append("\n".join(lines))
+            if not crowd_snapshot.empty:
+                notable = crowd_snapshot[
+                    (crowd_snapshot["Growth_Rate"] > 0.20) | (crowd_snapshot["User_Count"] > 20000)
+                ]
+                if not notable.empty:
+                    lines = [f"[人流數據 - 基準 {resolved_ts}] 需關注站點："]
+                    for _, row in notable.iterrows():
+                        lines.append(
+                            f"  - {row['Location_Name']} ({row['BS_ID']}): "
+                            f"人數 {int(row['User_Count']):,}, "
+                            f"成長率 {row['Growth_Rate']:.0%}, "
+                            f"漫遊率 {row['Roaming_User_Pct']:.0%}"
+                        )
+                    parts.append("\n".join(lines))
 
-            # Always show roaming data for Article 6 detection
-            roaming_high = ts_data[ts_data["Roaming_User_Pct"] >= 0.30]
-            if not roaming_high.empty:
-                lines = [f"[漫遊率警報 - {use_ts}] Roaming >= 30% (觸發 SOP 第 6 條)："]
-                for _, row in roaming_high.iterrows():
-                    lines.append(
-                        f"  - {row['Location_Name']} ({row['BS_ID']}): 漫遊率 {row['Roaming_User_Pct']:.0%}"
-                    )
-                parts.append("\n".join(lines))
+                # Always show roaming data for Article 6 detection
+                roaming_high = crowd_snapshot[crowd_snapshot["Roaming_User_Pct"] >= 0.30]
+                if not roaming_high.empty:
+                    lines = [f"[漫遊率警報 - 基準 {resolved_ts}] Roaming >= 30% (觸發 SOP 第 6 條)："]
+                    for _, row in roaming_high.iterrows():
+                        lines.append(
+                            f"  - {row['Location_Name']} ({row['BS_ID']}): 漫遊率 {row['Roaming_User_Pct']:.0%}"
+                        )
+                    parts.append("\n".join(lines))
+                else:
+                    lines = [f"[漫遊率 - 基準 {resolved_ts}] 所有站點 Roaming_User_Pct < 30%，SOP 第 6 條未觸發"]
+                    for _, row in crowd_snapshot.iterrows():
+                        lines.append(
+                            f"  - {row['Location_Name']} ({row['BS_ID']}): 漫遊率 {row['Roaming_User_Pct']:.0%}"
+                        )
+                    parts.append("\n".join(lines))
 
         # Get active incidents
         incidents = repository.get_live_incidents_raw()
