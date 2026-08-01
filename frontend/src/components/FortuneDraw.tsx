@@ -1,18 +1,21 @@
-import { useEffect, useState } from 'react';
-import type { TrafficSegment, CrowdDensity } from '../types';
+import { useEffect, useMemo, useState } from 'react';
+import type { TrafficSegment, CrowdDensity, RoadSegment } from '../types';
 import './FortuneDraw.css';
 
 interface FortuneDrawProps {
   trafficData: TrafficSegment[];
   crowdData: CrowdDensity[];
+  roadNetwork: RoadSegment[];
 }
 
 type FortuneTier = 'good' | 'fair' | 'bad';
+type Stage = 'drawing' | 'revealed' | 'interpreted';
 
 interface FortuneVerse {
   tier: FortuneTier;
   label: string;
   seal: string;
+  headline: string;
   lines: [string, string, string, string];
 }
 
@@ -22,12 +25,14 @@ const VERSES: Record<FortuneTier, FortuneVerse[]> = {
       tier: 'good',
       label: '上上籤 · 大吉',
       seal: '吉',
+      headline: '目前適合出行',
       lines: ['車行順暢如春水', '一路暢通到家門', '今日出行皆吉利', '不必改道自安心'],
     },
     {
       tier: 'good',
       label: '上上籤 · 大吉',
       seal: '吉',
+      headline: '目前適合出行',
       lines: ['路況清朗風輕揚', '往來車馬皆順暢', '此時出行正是好', '不擇時辰亦無妨'],
     },
   ],
@@ -36,12 +41,14 @@ const VERSES: Record<FortuneTier, FortuneVerse[]> = {
       tier: 'fair',
       label: '中平籤 · 小心',
       seal: '平',
+      headline: '出行請保持謹慎',
       lines: ['路遇壅塞莫心焦', '繞道而行有其效', '耐心等候風波過', '平安順遂終可期'],
     },
     {
       tier: 'fair',
       label: '中平籤 · 小心',
       seal: '平',
+      headline: '出行請保持謹慎',
       lines: ['車流漸重似陰天', '未至大礙且從容', '留意號誌多觀望', '緩行終能保平安'],
     },
   ],
@@ -50,12 +57,14 @@ const VERSES: Record<FortuneTier, FortuneVerse[]> = {
       tier: 'bad',
       label: '下下籤 · 慎行',
       seal: '凶',
+      headline: '目前不建議立即出發',
       lines: ['此路壅塞如亂麻', '勸君暫且莫強行', '另尋他徑方為上', '稍安勿躁待疏通'],
     },
     {
       tier: 'bad',
       label: '下下籤 · 慎行',
       seal: '凶',
+      headline: '目前不建議立即出發',
       lines: ['前方車海動不得', '硬闖此路恐誤時', '不如改道求心安', '繞行片刻反是宜'],
     },
   ],
@@ -64,12 +73,6 @@ const VERSES: Record<FortuneTier, FortuneVerse[]> = {
 function tierFromSaturation(score: number): FortuneTier {
   if (score >= 0.95) return 'bad';
   if (score >= 0.85) return 'fair';
-  return 'good';
-}
-
-function tierFromCrowd(c: CrowdDensity): FortuneTier {
-  if (c.roamingUserPct >= 0.30 || c.growthRate > 0.30 || c.userCount > 25000) return 'bad';
-  if (c.growthRate > 0.10) return 'fair';
   return 'good';
 }
 
@@ -84,16 +87,26 @@ interface FortuneResult {
   headline: TrafficSegment;
   congestedRoads: TrafficSegment[];
   crowdedSpots: CrowdDensity[];
+  alternatives: string[];
+  tags: string[];
+  smoothnessIndex: number;
 }
 
 const ROAD_LIST_SIZE = 4;
 const CROWD_LIST_SIZE = 3;
+const DRAW_ANIMATION_MS = 900;
 
-export default function FortuneDraw({ trafficData, crowdData }: FortuneDrawProps) {
+export default function FortuneDraw({ trafficData, crowdData, roadNetwork }: FortuneDrawProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [stage, setStage] = useState<Stage>('drawing');
   const [result, setResult] = useState<FortuneResult | null>(null);
 
-  // 彈窗開啟時鎖住背景頁面捲動，滑鼠滾輪只會捲動籤詩卡本身
+  const networkByName = useMemo(() => {
+    const map = new Map<string, RoadSegment>();
+    roadNetwork.forEach((r) => map.set(r.segmentId, r));
+    return map;
+  }, [roadNetwork]);
+
   useEffect(() => {
     if (!isOpen) return;
     const previousOverflow = document.body.style.overflow;
@@ -112,18 +125,35 @@ export default function FortuneDraw({ trafficData, crowdData }: FortuneDrawProps
     const pool = VERSES[tier];
     const verse = pool[Math.floor(Math.random() * pool.length)];
 
-    const crowdedSpots = [...crowdData]
-      .sort((a, b) => b.userCount - a.userCount)
-      .slice(0, CROWD_LIST_SIZE);
+    const congestedRoads = roadsByCongestion.slice(0, ROAD_LIST_SIZE);
+    const crowdedSpots = [...crowdData].sort((a, b) => b.userCount - a.userCount).slice(0, CROWD_LIST_SIZE);
 
-    setResult({
-      verse,
-      headline,
-      congestedRoads: roadsByCongestion.slice(0, ROAD_LIST_SIZE),
-      crowdedSpots,
-    });
+    const headlineNetwork = networkByName.get(headline.segmentId);
+    const alternatives = (headlineNetwork?.alternatives ?? [])
+      .map((id) => networkByName.get(id)?.name)
+      .filter((n): n is string => Boolean(n));
+
+    const heavilyCongestedCount = trafficData.filter((s) => s.saturationScore >= 0.85).length;
+    const crowdSurge = crowdedSpots.find((s) => s.growthRate > 0.3 || s.userCount > 25000);
+    const roamingSpike = crowdedSpots.find((s) => s.roamingUserPct >= 0.3);
+
+    const tags: string[] = [];
+    if (tier === 'bad') tags.push('重度壅塞');
+    else if (tier === 'fair') tags.push('路段壅塞');
+    if (heavilyCongestedCount >= 3) tags.push('多路段同時壅塞');
+    if (crowdSurge) tags.push('人潮激增');
+    if (roamingSpike) tags.push('漫遊比例偏高');
+    if (tags.length === 0) tags.push('路況正常');
+
+    const smoothnessIndex = Math.max(0, Math.min(100, Math.round((1 - headline.saturationScore) * 100)));
+
+    setResult({ verse, headline, congestedRoads, crowdedSpots, alternatives, tags, smoothnessIndex });
+    setStage('drawing');
     setIsOpen(true);
+    window.setTimeout(() => setStage('revealed'), DRAW_ANIMATION_MS);
   };
+
+  const close = () => setIsOpen(false);
 
   return (
     <>
@@ -133,65 +163,152 @@ export default function FortuneDraw({ trafficData, crowdData }: FortuneDrawProps
       </button>
 
       {isOpen && result && (
-        <div className="fortune-overlay" onClick={() => setIsOpen(false)}>
-          <div className={`fortune-card fortune-card--${result.verse.tier}`} onClick={(e) => e.stopPropagation()}>
-            <div className="fortune-card-corner fortune-card-corner--tl" />
-            <div className="fortune-card-corner fortune-card-corner--tr" />
-            <div className="fortune-card-corner fortune-card-corner--bl" />
-            <div className="fortune-card-corner fortune-card-corner--br" />
+        <div className="fortune-overlay" onClick={close}>
+          <div
+            className={`fortune-card fortune-card--${result.verse.tier} fortune-card--${stage}`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button className="fortune-dismiss" onClick={close} aria-label="關閉">✕</button>
 
-            <div className="fortune-seal">{result.verse.seal}</div>
-            <div className="fortune-title">路況籤詩</div>
-            <div className="fortune-label">{result.verse.label}</div>
+            {stage === 'drawing' && (
+              <div className="fortune-stage fortune-stage--drawing">
+                <div className="fortune-shaker">
+                  <span className="fortune-shaker-stick" />
+                  <span className="fortune-shaker-stick" />
+                  <span className="fortune-shaker-stick" />
+                </div>
+                <div className="fortune-drawing-label">誠心祈求，籤詩正在搖出…</div>
+              </div>
+            )}
 
-            <div className="fortune-poem">
-              {result.verse.lines.map((line, i) => (
-                <span key={i} className="fortune-poem-line">{line}</span>
-              ))}
-            </div>
+            {stage === 'revealed' && (
+              <div className="fortune-stage fortune-stage--revealed">
+                <div className="fortune-eyebrow">路況籤詩</div>
+                <div className={`fortune-seal fortune-seal--big fortune-seal--${result.verse.tier}`}>
+                  {result.verse.seal}
+                </div>
+                <div className="fortune-label">{result.verse.label}</div>
+                <button className="fortune-primary-btn" onClick={() => setStage('interpreted')}>
+                  解籤
+                </button>
+              </div>
+            )}
 
-            <div className="fortune-divider">— 籤 解：全城壅塞路段 —</div>
+            {stage === 'interpreted' && (
+              <div className="fortune-stage fortune-stage--interpreted">
+                <div className="fortune-eyebrow">解籤 · 今日路況分析</div>
 
-            <div className="fortune-list">
-              {result.congestedRoads.map((seg) => {
-                const t = tierFromSaturation(seg.saturationScore);
-                return (
-                  <div className="fortune-list-row" key={seg.segmentId}>
-                    <span className="fortune-list-name">{seg.roadName}</span>
-                    <span className="fortune-list-meta">
-                      {(seg.saturationScore * 100).toFixed(0)}%
-                      <span className={`fortune-reading-pill fortune-reading-pill--${t}`}>
-                        {statusLabel(t)}
-                      </span>
-                    </span>
+                <div className="fortune-verdict">
+                  <div className={`fortune-seal fortune-seal--small fortune-seal--${result.verse.tier}`}>
+                    {result.verse.seal}
                   </div>
-                );
-              })}
-            </div>
-
-            <div className="fortune-divider">— 籤 解：人潮聚集地點 —</div>
-
-            <div className="fortune-list">
-              {result.crowdedSpots.length === 0 && (
-                <div className="fortune-list-empty">目前無人流資料</div>
-              )}
-              {result.crowdedSpots.map((spot) => {
-                const t = tierFromCrowd(spot);
-                return (
-                  <div className="fortune-list-row" key={spot.bsId}>
-                    <span className="fortune-list-name">{spot.locationName}</span>
-                    <span className="fortune-list-meta">
-                      {spot.userCount.toLocaleString()} 人
-                      <span className={`fortune-reading-pill fortune-reading-pill--${t}`}>
-                        漫遊 {(spot.roamingUserPct * 100).toFixed(0)}%
-                      </span>
-                    </span>
+                  <div className="fortune-verdict-text">
+                    <div className="fortune-verdict-headline">{result.verse.headline}</div>
+                    <p className="fortune-verdict-body">
+                      {result.headline.roadName} 目前飽和度 {(result.headline.saturationScore * 100).toFixed(0)}%，
+                      均速 {result.headline.avgSpeed.toFixed(0)} km/h，車道狀態「{result.headline.laneStatus}」。
+                    </p>
                   </div>
-                );
-              })}
-            </div>
+                </div>
 
-            <button className="fortune-close" onClick={() => setIsOpen(false)}>收下籤詩</button>
+                <div className="fortune-poem fortune-poem--compact">
+                  {result.verse.lines.map((line, i) => (
+                    <span key={i} className="fortune-poem-line">{line}</span>
+                  ))}
+                </div>
+
+                <section className="fortune-section">
+                  <h4 className="fortune-section-title">即時路況分析</h4>
+                  <dl className="fortune-fact-grid">
+                    <div className="fortune-fact">
+                      <dt>主要壅塞路段</dt>
+                      <dd>{result.headline.roadName}</dd>
+                    </div>
+                    <div className="fortune-fact">
+                      <dt>飽和度</dt>
+                      <dd>{(result.headline.saturationScore * 100).toFixed(0)}%</dd>
+                    </div>
+                    <div className="fortune-fact">
+                      <dt>平均車速</dt>
+                      <dd>{result.headline.avgSpeed.toFixed(0)} km/h</dd>
+                    </div>
+                    <div className="fortune-fact">
+                      <dt>全城壅塞路段數</dt>
+                      <dd>{result.congestedRoads.filter((s) => s.saturationScore >= 0.85).length} / 15</dd>
+                    </div>
+                    <div className="fortune-fact fortune-fact--wide">
+                      <dt>可考慮改道路段</dt>
+                      <dd>{result.alternatives.length > 0 ? result.alternatives.join('、') : '—'}</dd>
+                    </div>
+                  </dl>
+                </section>
+
+                <section className="fortune-section">
+                  <h4 className="fortune-section-title">人流狀況分析</h4>
+                  <dl className="fortune-fact-grid">
+                    {result.crowdedSpots.map((spot) => (
+                      <div className="fortune-fact" key={spot.bsId}>
+                        <dt>{spot.locationName}</dt>
+                        <dd>{spot.userCount.toLocaleString()} 人・漫遊 {(spot.roamingUserPct * 100).toFixed(0)}%</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+
+                <section className="fortune-section">
+                  <h4 className="fortune-section-title">
+                    天氣狀況分析
+                    <span className="fortune-section-badge">資料源規劃中</span>
+                  </h4>
+                  <p className="fortune-placeholder-note">
+                    尚未串接氣象資料（規劃接入 OpenWeather API），此區塊不顯示推測數值。
+                  </p>
+                </section>
+
+                <section className="fortune-section">
+                  <h4 className="fortune-section-title">判定原因</h4>
+                  <div className="fortune-tags">
+                    {result.tags.map((tag) => (
+                      <span key={tag} className={`fortune-tag fortune-tag--${result.verse.tier}`}>{tag}</span>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="fortune-section">
+                  <h4 className="fortune-section-title">綜合評估</h4>
+                  <div className="fortune-score-row">
+                    <div className={`fortune-score-box fortune-score-box--${result.verse.tier}`}>
+                      <div className="fortune-score-num">{result.smoothnessIndex}</div>
+                      <div className="fortune-score-cap">路況順暢指數<br />依飽和度換算</div>
+                    </div>
+                    <p className="fortune-score-note">
+                      綜合 {result.congestedRoads.filter((s) => s.saturationScore >= 0.85).length} 個壅塞路段與
+                      {result.crowdedSpots[0]?.locationName ?? '各站'}人流狀況，
+                      系統判定本次出行條件為「{statusLabel(result.verse.tier)}」。
+                    </p>
+                  </div>
+                </section>
+
+                <section className="fortune-section">
+                  <h4 className="fortune-section-title">出行建議</h4>
+                  <ul className="fortune-suggestions">
+                    {result.verse.tier === 'bad' && (
+                      <>
+                        <li>建議避開 {result.headline.roadName}{result.alternatives.length > 0 ? `，可考慮改道 ${result.alternatives[0]}` : ''}</li>
+                        <li>如有大眾運輸選項，建議優先使用</li>
+                      </>
+                    )}
+                    {result.verse.tier === 'fair' && (
+                      <li>{result.headline.roadName} 略有壅塞，建議保持安全車距並留意號誌調整</li>
+                    )}
+                    {result.verse.tier === 'good' && <li>目前路況順暢，可依原計畫出行</li>}
+                    <li>本結果依 {result.headline.timestamp} 資料自動判定，實際路況請以現場為準</li>
+                  </ul>
+                </section>
+
+                <button className="fortune-close" onClick={() => setStage('revealed')}>返回籤面</button>
+              </div>
+            )}
           </div>
         </div>
       )}

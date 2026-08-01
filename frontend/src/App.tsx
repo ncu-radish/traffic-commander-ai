@@ -247,7 +247,7 @@ function App() {
         </aside>
       </div>
 
-      <FortuneDraw trafficData={currentTraffic} crowdData={currentCrowd} />
+      <FortuneDraw trafficData={currentTraffic} crowdData={currentCrowd} roadNetwork={roadNetwork} />
     </div>
   );
 }
