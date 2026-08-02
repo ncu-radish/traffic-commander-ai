@@ -30,7 +30,7 @@ export default function ChatPanel({
       id: 'system-1',
       role: 'system',
       content:
-        '交通指揮官 AI 已就緒。可詢問當前交通狀況，或提出假設性情境（What-if）。回覆將引用 SOP 條款。',
+        '牽牽 已就緒。可詢問當前交通狀況，或提出假設性情境（What-if）。回覆將引用 SOP 條款。',
       timestamp: new Date().toISOString(),
     },
   ]);
@@ -200,7 +200,7 @@ function Message({ message }: { message: ChatMessage }) {
 
   return (
     <div className={`chat__msg ${isUser ? 'chat__msg--user' : 'chat__msg--ai'}`}>
-      {!isUser && <span className="chat__msg-role">AI 指揮官</span>}
+      {!isUser && <span className="chat__msg-role">牽牽</span>}
       <div className="chat__msg-body">
         {isUser ? (
           message.content

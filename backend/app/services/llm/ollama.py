@@ -4,7 +4,7 @@ from app.core.config import settings
 from langchain_ollama import ChatOllama
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
-SYSTEM_PROMPT = """你是交通指揮官 AI 助理（Traffic Commander AI），負責台北市信義計畫區的即時交通監控與決策支援。
+SYSTEM_PROMPT = """你是「牽牽」AI 助理，負責台北市信義計畫區的即時交通監控與決策支援。
 
 ## 核心職責
 - 即時分析信義計畫區的交通狀態，包含路口飽和度、旅行時間（ETE）、人潮密度等指標

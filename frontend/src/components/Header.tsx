@@ -68,8 +68,8 @@ export default function Header({
           aria-hidden="true"
         />
         <div className="header__titles">
-          <h1 className="header__title">交通指揮官 AI</h1>
-          <span className="header__subtitle">Traffic Commander Agent</span>
+          <h1 className="header__title">牽牽</h1>
+          <span className="header__subtitle">智慧交通決策系統</span>
         </div>
       </div>
 
