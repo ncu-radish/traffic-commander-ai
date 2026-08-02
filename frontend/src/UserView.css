@@ -8,6 +8,9 @@
   font-family: var(--font-family);
   /* 側邊欄佔380px+間距，抽籤按鈕固定在視窗右下角時要避開，不然會疊在事件卡片上。 */
   --fortune-trigger-right: calc(380px + var(--space-3) + var(--space-6));
+  /* 時間軸托盤實際高度約 47px（padding + 控制列），抽籤按鈕貼底固定
+     定位要往上讓開，不然會疊在時間軸上面。 */
+  --fortune-trigger-bottom: calc(var(--space-10) + var(--space-6));
 }
 
 .user-view--loading {

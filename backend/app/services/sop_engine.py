@@ -223,8 +223,8 @@ def check_article_6(crowd_df: pd.DataFrame, timestamp: str) -> List[SOPAlert]:
             alerts.append(SOPAlert(
                 article="SOP 第 6 條",
                 level="B",
-                title=f"多語化通報觸發 — {row['Location_Name']}",
-                description=f"{row['Location_Name']} 漫遊比率 {roaming*100:.0f}%，已達 SOP 第 6 條門檻。該區域所有告警需產出多國語言版本。",
+                title=f"境外人潮異常聚集 — {row['Location_Name']}",
+                description=f"{row['Location_Name']} 目前人數 {int(row['User_Count']):,}，其中漫遊（境外/外地門號）比率達 {roaming*100:.0f}%，顯示大量國際或外地旅客聚集。依 SOP 第 6 條，建議產出多語言告警並加強現場疏導。",
                 triggered_by=row["BS_ID"],
                 data_evidence={
                     "bs_id": row["BS_ID"],

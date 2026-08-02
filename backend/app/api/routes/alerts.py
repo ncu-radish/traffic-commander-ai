@@ -10,7 +10,10 @@ from app.models.schemas import (
     MultiLangMessages,
 )
 from app.data.repository import repository
-from app.services.sop_engine import check_all_sop_thresholds, check_article_6
+from app.services.sop_engine import check_all_sop_thresholds, check_article_2, check_article_5
+from app.services.route_planner import plan_routes
+from app.services.ete_calculator import calculate_ete
+from app.services.traffic_snapshot import snapshot_at
 from app.services.llm.base import LLMService
 from app.api.dependencies import get_llm_service
 
@@ -45,111 +48,180 @@ def generate_multilang_alert(
     llm_service: LLMService = Depends(get_llm_service),
 ):
     """
-    Generate multi-language alert messages (SOP Article 6).
-    Checks roaming threshold and uses LLM to generate translated alerts.
+    Public CMS/SMS message. 第 6 條只負責「觸發判定」：Roaming >= 30% 才需要
+    多語（LLM 只翻譯固定文字，不新增資訊），未觸發時只有中文。訊息本身要嘛是
+    某個事故的內容（SOP第2條b項格式：事故位置/改道指引/預計延誤時間/求援提醒），
+    要嘛——沒有對應事故時（例如單純人潮聚集）——是同樣四要點改寫成的人潮疏導
+    通知（現場位置/疏導動向/人潮狀況/求援提醒）。id 可以是事件 event_id
+    （SOP2/5的事故）或基地台 BS_ID（SOP6單獨觸發、沒有對應事故時）。
     """
-    crowd_df = repository.get_crowd_density_df()
+    if not request.event_id:
+        return MultiLangAlertResponse(triggered=False, trigger_stations=[], roaming_details={}, messages=None)
 
-    # Determine timestamp
-    if request.timestamp:
-        ts = request.timestamp
+    incidents_raw = repository.get_live_incidents_raw()
+    incident = next((i for i in incidents_raw if i.get("event_id") == request.event_id), None)
+
+    if incident:
+        result = _build_incident_message(incident, request.timestamp)
+    elif request.event_id.startswith("BS_"):
+        result = _build_crowd_message(request.event_id, request.timestamp)
     else:
-        # Use the latest available timestamp
-        ts = crowd_df["Timestamp"].max() if not crowd_df.empty else ""
+        return MultiLangAlertResponse(triggered=False, trigger_stations=[], roaming_details={}, messages=None)
 
-    # Check Article 6
-    roaming_alerts = check_article_6(crowd_df, ts)
-    triggered = bool(roaming_alerts)
+    if result is None:
+        return MultiLangAlertResponse(triggered=False, trigger_stations=[], roaming_details={}, messages=None)
 
-    from app.models.schemas import ChatRequest
+    zh_message, trigger_stations, roaming_details = result
 
-    # --- Not triggered: SOP Article 6 only requires a Chinese citizen SMS ---
-    if not triggered:
-        context_parts = [f"時間: {ts}"]
-        if request.context:
-            context_parts.append(f"事故背景: {request.context}")
-        context_str = "\n".join(context_parts)
-
-        llm_request = ChatRequest(
-            message=(
-                "SOP 第 6 條漫遊門檻未觸發，僅需產出中文民眾簡訊。"
-                "請根據以下資訊產出一則簡短的中文交通告警簡訊，"
-                "適合 CMS 電子看板與手機推播，內容涵蓋事故位置、改道指引與避開提醒，"
-                "避免使用專業術語，只回傳簡訊內文一行。\n\n"
-                f"{context_str}"
-            )
-        )
-        try:
-            zh = llm_service.generate_chat_response(llm_request).reply.strip()
-        except Exception:
-            zh = ""
-        if not zh:
-            zh = "【交通快訊】信義計畫區實施交通管制，請依現場號誌與改道指引行駛，並預留行車時間。"
-
+    if not trigger_stations:
+        # 未觸發僅中文——中文簡訊仍然是真實內容，不是佔位訊息。
         return MultiLangAlertResponse(
             triggered=False,
             trigger_stations=[],
             roaming_details={},
-            messages=MultiLangMessages(zh=zh),
+            messages=MultiLangMessages(zh=zh_message, en="", ja=None, ko=None),
         )
 
-    # --- Triggered: produce ZH / EN / JA / KO ---
-    trigger_stations = [a.triggered_by for a in roaming_alerts]
-    roaming_details = {
-        a.triggered_by: a.data_evidence.get("roaming_user_pct", 0)
-        for a in roaming_alerts
-    }
-
-    # Build context for LLM
-    context_parts = [
-        f"時間: {ts}",
-        f"觸發站點: {', '.join(trigger_stations)}",
-    ]
-    for alert in roaming_alerts:
-        ev = alert.data_evidence
-        context_parts.append(
-            f"- {ev.get('location_name', '')}: 漫遊比率 {ev.get('roaming_user_pct', 0)*100:.0f}%, "
-            f"人數 {ev.get('user_count', 0):,}"
-        )
-    if request.context:
-        context_parts.append(f"額外背景: {request.context}")
-
-    context_str = "\n".join(context_parts)
-
-    # Use LLM to generate multi-language messages
-    llm_request = ChatRequest(
-        message=f"請根據以下資訊，產出符合 SOP 第 6 條的多語化告警簡訊。"
-                f"簡訊需簡短、適合 CMS 電子看板與手機推播，避免使用專業術語。"
-                f"請分別產出中文、英文、日文、韓文四個版本。"
-                f"格式：每種語言各一行，以 [ZH], [EN], [JA], [KO] 標記。\n\n{context_str}"
-    )
-    llm_response = llm_service.generate_chat_response(llm_request)
-
-    # Parse LLM response into language blocks
-    messages = _parse_multilang(llm_response.reply, context_str)
+    en, ja, ko = _translate_cms_message(llm_service, zh_message)
 
     return MultiLangAlertResponse(
         triggered=True,
         trigger_stations=trigger_stations,
         roaming_details=roaming_details,
-        messages=messages,
+        messages=MultiLangMessages(zh=zh_message, en=en, ja=ja, ko=ko),
     )
 
 
-def _parse_multilang(llm_text: str, fallback_context: str) -> MultiLangMessages:
-    """Parse LLM output into language-specific messages."""
-    zh = _extract_lang(llm_text, "[ZH]", "[EN]")
-    en = _extract_lang(llm_text, "[EN]", "[JA]")
-    ja = _extract_lang(llm_text, "[JA]", "[KO]")
-    ko = _extract_lang(llm_text, "[KO]", None)
+def _build_incident_message(incident: dict, requested_ts: Optional[str]):
+    """
+    事故類型決定訊息格式，不是每種事件都適用「改道」：
+    - SOP第2條（道路封閉）：事故位置、改道指引、預計延誤時間、求援提醒。
+    - SOP第5條（號誌故障）：SOP條文自己就規定了固定格式——「<路段>號誌故障，
+      請依現場指揮通行」，本來就不是靠改道處理，講「改道」反而是錯的資訊。
+    """
+    ts = requested_ts or incident.get("timestamp", "")
+    affected_segment = incident.get("affected_segment", "")
+    location = incident.get("location") or affected_segment
 
-    # Fallback if parsing fails
-    if not zh:
-        zh = f"【交通警報】信義計畫區交通管制中，請改道行駛。{fallback_context[:50]}"
-    if not en:
-        en = "Traffic alert: Xinyi District traffic control in effect. Please use alternative routes."
+    if check_article_5(incident) and not check_article_2(incident):
+        seg_info_5 = next(
+            (s for s in repository.get_road_network_raw() if s.get("segment_id") == affected_segment),
+            None,
+        )
+        # SOP第5條的CMS格式是「<路段>號誌故障」，用路段名稱而非事故位置
+        # 自由文字——location本身可能已經包含「號誌故障」字樣，兩個接在一起會重複。
+        road_name = seg_info_5.get("name") if seg_info_5 else location
+        zh_message = (
+            f"【號誌故障通報】{road_name}號誌故障，請依現場指揮通行，"
+            f"行經時請放慢車速並保持耐心；如遇緊急狀況請撥打 110 或 119 求援。"
+        )
+        nearby_station_ids = seg_info_5.get("nearby_stations", []) if seg_info_5 else []
+        return zh_message, *_check_article6_trigger(nearby_station_ids, ts)
 
-    return MultiLangMessages(zh=zh, en=en, ja=ja, ko=ko)
+    severity = incident.get("severity", "Medium")
+
+    road_network = repository.get_road_network_raw()
+    traffic_df = repository.get_traffic_flow_df()
+    ts_traffic = snapshot_at(traffic_df, ts)
+    traffic_records = ts_traffic.to_dict("records") if not ts_traffic.empty else []
+
+    plan = plan_routes(
+        affected_segment, road_network, traffic_records,
+        incident_location=incident.get("location"),
+    )
+    detour_clause = (
+        f"請改道{plan.primary_route_name}" if plan.primary_route_name
+        else "尚無符合條件之替代路線，請依現場指揮通行"
+    )
+
+    seg_data = (
+        ts_traffic[ts_traffic["Segment_ID"] == affected_segment]
+        if not ts_traffic.empty else ts_traffic
+    )
+    avg_saturation = float(seg_data["Saturation_Score"].mean()) if not seg_data.empty else 0.5
+    ete = calculate_ete(severity, avg_saturation)
+
+    zh_message = (
+        f"【交通事故通報】{location}封閉，{detour_clause}，"
+        f"預計延誤 {ete.ete_minutes:.0f} 分鐘。請提前避開該路段；"
+        f"如遇緊急狀況請撥打 110 或 119 求援。"
+    )
+
+    # 觸發判定：事故路段周邊基地台（nearby_stations）是否有任一達 SOP 第 6 條門檻。
+    seg_info = next((s for s in road_network if s.get("segment_id") == affected_segment), None)
+    nearby_station_ids = seg_info.get("nearby_stations", []) if seg_info else []
+
+    trigger_stations, roaming_details = _check_article6_trigger(nearby_station_ids, ts)
+    return zh_message, trigger_stations, roaming_details
+
+
+def _check_article6_trigger(nearby_station_ids: list, ts: str):
+    """SOP第6條觸發判定：給定的基地台清單裡，是否有任一達 Roaming >= 30%。"""
+    crowd_df = repository.get_crowd_density_df()
+    crowd_snapshot = snapshot_at(crowd_df, ts, id_col="BS_ID")
+
+    trigger_stations: list = []
+    roaming_details: dict = {}
+    if not crowd_snapshot.empty and nearby_station_ids:
+        nearby = crowd_snapshot[crowd_snapshot["BS_ID"].isin(nearby_station_ids)]
+        for _, row in nearby.iterrows():
+            roaming = float(row["Roaming_User_Pct"])
+            if roaming >= 0.30:
+                trigger_stations.append(row["BS_ID"])
+                roaming_details[row["BS_ID"]] = roaming
+
+    return trigger_stations, roaming_details
+
+
+def _build_crowd_message(station_id: str, requested_ts: Optional[str]):
+    """
+    沒有對應事故的單純人潮聚集（SOP6自己觸發）。訊息要點改寫成人潮疏導版本：
+    現場位置、疏導動向、人潮/漫遊狀況、求援提醒——跟事故版本同一套四要點，
+    只是換成「人」而非「路」的疏導內容。
+    """
+    crowd_df = repository.get_crowd_density_df()
+    ts = requested_ts or (crowd_df["Timestamp"].max() if not crowd_df.empty else "")
+    crowd_snapshot = snapshot_at(crowd_df, ts, id_col="BS_ID")
+    if crowd_snapshot.empty:
+        return None
+
+    row_match = crowd_snapshot[crowd_snapshot["BS_ID"] == station_id]
+    if row_match.empty:
+        return None
+    row = row_match.iloc[0]
+
+    roaming = float(row["Roaming_User_Pct"])
+    location_name = row["Location_Name"]
+    user_count = int(row["User_Count"])
+
+    zh_message = (
+        f"【人潮疏導通知】{location_name}目前人數 {user_count:,}，"
+        f"境外/外地旅客比例達 {roaming*100:.0f}%，請配合現場疏導動線通行，"
+        f"避免長時間停留；如需協助請洽現場工作人員或撥打 1999 市民熱線。"
+    )
+
+    if roaming < 0.30:
+        return zh_message, [], {}
+
+    return zh_message, [station_id], {station_id: roaming}
+
+
+def _translate_cms_message(llm_service: LLMService, zh_message: str):
+    from app.models.schemas import ChatRequest
+    llm_request = ChatRequest(
+        message=(
+            "請將以下交通/人潮CMS看板簡訊，忠實翻譯成英文、日文、韓文，"
+            "不要新增原文沒有的資訊、不要省略任何一個要點。"
+            "風格需簡短，適合電子看板與手機簡訊顯示，避免專業術語。\n\n"
+            f"原文（中文）：{zh_message}\n\n"
+            "請用 [EN]、[JA]、[KO] 標記分別輸出三個語言版本，每種語言各一段，不要輸出其他內容。"
+        )
+    )
+    llm_response = llm_service.generate_chat_response(llm_request)
+    en = _extract_lang(llm_response.reply, "[EN]", "[JA]") or "Traffic alert: please refer to the Chinese notice for details."
+    ja = _extract_lang(llm_response.reply, "[JA]", "[KO]")
+    ko = _extract_lang(llm_response.reply, "[KO]", None)
+    return en, ja, ko
 
 
 def _extract_lang(text: str, start_tag: str, end_tag: Optional[str]) -> Optional[str]:

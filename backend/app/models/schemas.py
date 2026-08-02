@@ -119,3 +119,4 @@ class MultiLangAlertResponse(BaseModel):
 class MultiLangAlertRequest(BaseModel):
     timestamp: Optional[str] = None
     context: Optional[str] = None  # Additional context for LLM
+    event_id: Optional[str] = None  # 指定事故事件時，簡訊內容改用該事件的事故位置/改道/ETE

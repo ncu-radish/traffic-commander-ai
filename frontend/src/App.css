@@ -16,6 +16,9 @@
   grid-template-rows: auto 1fr auto;
   background: var(--surface-base);
   overflow: hidden;
+  /* 時間軸托盤實際高度約 47px（padding + 控制列），抽籤按鈕貼底固定
+     定位要往上讓開，不然會疊在時間軸上面。 */
+  --fortune-trigger-bottom: calc(var(--space-10) + var(--space-6));
 }
 
 /* ─── Main region ─────────────────────────────────────────────── */

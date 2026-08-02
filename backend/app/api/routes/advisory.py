@@ -22,6 +22,7 @@ from app.data.repository import repository
 from app.services.sop_engine import check_article_2, check_article_5
 from app.services.route_planner import plan_routes
 from app.services.ete_calculator import calculate_ete
+from app.services.traffic_snapshot import snapshot_at
 from app.services.llm.base import LLMService
 from app.api.dependencies import get_llm_service
 
@@ -109,12 +110,20 @@ def generate_advisory(
     route_plan = None
     if art2 and affected_segment.startswith("RD_"):
         road_network = repository.get_road_network_raw()
-        # Get traffic data at the incident timestamp
+        # As-of snapshot rather than an exact-timestamp filter: the feed is
+        # sparse, so most timestamps don't have a reading for every segment,
+        # which would leave candidates missing and silently break the
+        # "lowest saturation wins" tie-break.
         traffic_df = repository.get_traffic_flow_df()
-        ts_traffic = traffic_df[traffic_df["Timestamp"] == timestamp]
+        ts_traffic = snapshot_at(traffic_df, timestamp)
         traffic_records = ts_traffic.to_dict("records") if not ts_traffic.empty else []
 
-        route_plan = plan_routes(affected_segment, road_network, traffic_records)
+        route_plan = plan_routes(
+            affected_segment,
+            road_network,
+            traffic_records,
+            incident_location=incident.get("location"),
+        )
 
         reasoning_chain.append(ReasoningStep(
             step=step_num,
@@ -135,12 +144,10 @@ def generate_advisory(
     seg_evidence: Optional[Dict[str, Any]] = None
     if affected_segment.startswith("RD_"):
         traffic_df = repository.get_traffic_flow_df()
-        seg_rows = traffic_df[traffic_df["Segment_ID"] == affected_segment]
-        if timestamp:
-            as_of = seg_rows[seg_rows["Timestamp"] <= timestamp]
-            seg_rows = as_of if not as_of.empty else seg_rows
-        if not seg_rows.empty:
-            row = seg_rows.sort_values("Timestamp").iloc[-1]
+        ts_traffic = snapshot_at(traffic_df, timestamp)
+        seg_data = ts_traffic[ts_traffic["Segment_ID"] == affected_segment]
+        if not seg_data.empty:
+            row = seg_data.iloc[-1]
             avg_saturation = float(row["Saturation_Score"])
             seg_evidence = {
                 "road_name": row.get("Road_Name", affected_segment),
