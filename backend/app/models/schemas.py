@@ -88,7 +88,12 @@ class AdvisoryReport(BaseModel):
     alert_justification: str
     route_plan: Optional[RoutePlanResult] = None
     ete: Optional[ETEResult] = None
+    # 由本次事故直接觸發的協調動作（例如第5條號誌故障→通知台電/警力）。
     cross_system_actions: List[str] = []
+    # 同一時間點「另外」偵測到的狀況（例如第3/4條看的是當下人流資料，
+    # 觸發條件跟本次事故本身無關，只是剛好同一時間點都成立）——跟
+    # cross_system_actions分開列，避免報告讀起來像是本次事故造成的。
+    concurrent_conditions: List[str] = []
     reasoning_chain: List[ReasoningStep] = []
     llm_summary: Optional[str] = None
 
@@ -119,3 +124,4 @@ class MultiLangAlertResponse(BaseModel):
 class MultiLangAlertRequest(BaseModel):
     timestamp: Optional[str] = None
     context: Optional[str] = None  # Additional context for LLM
+    event_id: Optional[str] = None  # 指定事故事件時，簡訊內容改用該事件的事故位置/改道/ETE

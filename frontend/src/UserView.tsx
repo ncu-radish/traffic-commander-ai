@@ -7,12 +7,10 @@ import CrowdChart from './components/CrowdChart';
 import TimelineControl from './components/TimelineControl';
 import FortuneDraw from './components/FortuneDraw';
 import AlertBannerComponent from './components/AlertBanner';
-import AdvisorySummaryModal from './components/AdvisorySummaryModal';
 import ParentStudentPanel from './components/ParentStudentPanel';
 import type { LiveIncident, TrafficSegment, RoadSegment, CrowdDensity, AccidentHotspots } from './types';
 import { saturationColor, saturationLevel } from './theme/tokens';
 import { useSopAlerts } from './hooks/useSopAlerts';
-import { useAdvisoryReport } from './hooks/useAdvisoryReport';
 import { API_BASE } from './config/api';
 import { COMMUTE_ROUTES, COMMUTE_ORIGIN, COMMUTE_DESTINATION } from './data/commuteRoutes';
 import { assessCommuteRoutes } from './services/commuteRouteRisk';
@@ -165,15 +163,6 @@ export default function UserView({ onBack }: UserViewProps) {
   // 第4條大巨蛋散場、第5條號誌故障），跟校方版共用同一支 hook、同一套判定依據。
   const { visibleAlerts, dismissAlert } = useSopAlerts(currentTimestamp, activeIncidents);
 
-  // 事件注入時自動產出 AI 預警摘要（SOP判定 + 路線規劃 + ETE + LLM生成摘要）並跳出彈窗。
-  const {
-    report: advisoryReport,
-    loading: advisoryLoading,
-    open: advisoryModalOpen,
-    requestAdvisory,
-    close: closeAdvisory,
-  } = useAdvisoryReport();
-
   /**
    * 上下學路線評估。與校方端 (App.tsx) 共用同一份 COMMUTE_ROUTES
    * 與同一個 assessCommuteRoutes()，所以兩端地圖上的三條路線、
@@ -191,8 +180,9 @@ export default function UserView({ onBack }: UserViewProps) {
     });
     // 注入後 activeIncidents 變化會讓 useSopAlerts 自動重新查詢——
     // 事件對應到SOP第2/5條的話會拿到正式條文內容，其餘由 hook 自己補一則通用警報。
-    requestAdvisory(incident.eventId, incident.timestamp);
-  }, [requestAdvisory]);
+    // 家長端不需要建議書彈窗（推理過程/排除路段/號誌調整表是操作端內容），
+    // AlertBanner 的 publicView 已經會直接顯示公眾簡訊內容。
+  }, []);
 
   if (isLoading) {
     return <div className="user-view user-view--loading">載入資料中…</div>;
@@ -216,6 +206,7 @@ export default function UserView({ onBack }: UserViewProps) {
             key={alert.id}
             alert={alert}
             onDismiss={() => dismissAlert(alert.id)}
+            publicView
           />
         ))}
       </div>
@@ -290,13 +281,6 @@ export default function UserView({ onBack }: UserViewProps) {
       </div>
 
       <FortuneDraw trafficData={currentTraffic} crowdData={currentCrowd} roadNetwork={roadNetwork} />
-
-      <AdvisorySummaryModal
-        open={advisoryModalOpen}
-        loading={advisoryLoading}
-        report={advisoryReport}
-        onClose={closeAdvisory}
-      />
     </div>
   );
 }

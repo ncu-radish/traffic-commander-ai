@@ -8,6 +8,13 @@
   font-family: var(--font-family);
   /* 側邊欄佔380px+間距，抽籤按鈕固定在視窗右下角時要避開，不然會疊在事件卡片上。 */
   --fortune-trigger-right: calc(380px + var(--space-3) + var(--space-6));
+  /* 時間軸托盤實際高度約 47px（padding + 控制列），抽籤按鈕貼底固定
+     定位要往上讓開，不然會疊在時間軸上面。 */
+  --fortune-trigger-bottom: calc(var(--space-10) + var(--space-6));
+
+  /* 家長端主題欄：酪梨綠。跟校方端(App.css)同一套做法，Header.css讀這兩個變數。 */
+  --header-role-bg: color-mix(in srgb, var(--role-parent) 20%, var(--surface-panel));
+  --header-role-accent: var(--role-parent);
 }
 
 .user-view--loading {
@@ -55,6 +62,25 @@
 }
 
 .user-view__map {
+  /* 地圖維持深色，跟校方端(.map-frame)同一套釘回深色token的做法，
+     見 App.css 的說明註解。 */
+  --surface-base:   #121214;
+  --surface-sunken: #0E0E10;
+  --surface-panel:  #1C1D21;
+  --surface-raised: #222328;
+  --surface-input:  #191A1E;
+  --line-faint:     #23242A;
+  --line:           #2A2B30;
+  --line-strong:    #35363D;
+  --text-primary:   #E8E8EA;
+  --text-secondary: #9A9CA3;
+  --text-muted:     #6E7076;
+  --text-disabled:  #4E5057;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --shadow:    0 2px 8px rgba(0, 0, 0, 0.40);
+  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.55);
+  --sheen-top: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+
   position: relative;
   border-radius: var(--radius-lg);
   overflow: hidden;

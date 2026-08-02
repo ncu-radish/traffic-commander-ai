@@ -10,6 +10,15 @@
 .leaflet-container {
   background: var(--map-frame);
   font-family: var(--font-sans);
+  /* Leaflet 內部圖層自帶 z-index 200～800（tile 200、marker 600、popup 700、
+     control 800）。若地圖容器本身沒有 z-index，這些圖層會跟地圖外的浮動元件
+     （.map-route-toggle、.map-legend，皆為 --z-overlay = 10）在同一個 stacking
+     context 裡比大小，結果按鈕被 tile 蓋住而「消失」。
+     在容器上放一個 z-index，讓 Leaflet 的圖層被關進自己的 stacking context，
+     浮動按鈕才會照 --z-overlay 疊在地圖上方。校方端原本靠 App.css 的
+     `.map-frame .leaflet-container` 有這條規則，家長端沒有，所以只有家長端壞掉；
+     移到這裡讓所有使用 <TrafficMap /> 的頁面行為一致。 */
+  z-index: var(--z-map);
 }
 
 /* Terrain: pull the blue out of CARTO's dark tiles and flatten

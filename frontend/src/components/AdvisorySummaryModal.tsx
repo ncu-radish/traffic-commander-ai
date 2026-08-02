@@ -1,3 +1,5 @@
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { AdvisoryReportDTO } from '../hooks/useAdvisoryReport';
 import './AdvisorySummaryModal.css';
 
@@ -80,9 +82,11 @@ export default function AdvisorySummaryModal({
 
             <section className="advisory-modal__section">
               <h4>AI 摘要</h4>
-              <p className="advisory-modal__summary">
-                {report.llm_summary ?? report.alert_justification}
-              </p>
+              <div className="advisory-modal__summary markdown">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {report.llm_summary ?? report.alert_justification}
+                </ReactMarkdown>
+              </div>
             </section>
 
             {report.route_plan?.primary_route_name && (
@@ -147,10 +151,24 @@ export default function AdvisorySummaryModal({
 
             {report.cross_system_actions.length > 0 && (
               <section className="advisory-modal__section">
-                <h4>跨系統協調</h4>
+                <h4>跨系統協調（本次事故要求）</h4>
                 <ul className="route-check-modal__advisory-list">
                   {report.cross_system_actions.map((action, i) => (
                     <li key={i}>{action}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {report.concurrent_conditions.length > 0 && (
+              <section className="advisory-modal__section">
+                <h4>同時偵測到的其他狀況（與本次事故無因果關係）</h4>
+                <p className="advisory-modal__note">
+                  以下是同一時間點另外偵測到的門檻觸發，只是時間點剛好重疊，不是本次事故造成的。
+                </p>
+                <ul className="route-check-modal__advisory-list">
+                  {report.concurrent_conditions.map((cond, i) => (
+                    <li key={i}>{cond}</li>
                   ))}
                 </ul>
               </section>

@@ -22,6 +22,7 @@ export interface AdvisoryReportDTO {
     avg_saturation: number;
   } | null;
   cross_system_actions: string[];
+  concurrent_conditions: string[];
   reasoning_chain: {
     step: number;
     title: string;

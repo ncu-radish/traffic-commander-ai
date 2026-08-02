@@ -19,6 +19,11 @@ interface AlertCheckResponseDTO {
   roaming_alerts: SOPAlertDTO[];
 }
 
+// 這三條的 triggered_by 是後端 /api/alerts/multilang 認得的 id：
+// 第2/5條是事件 event_id，第6條是基地台 BS_ID（沒有對應事故時，SOP6自己就是
+// 訊息來源）。其餘條文的 triggered_by 是純路段/基地台 id，沒有對應的簡訊內容。
+const CMS_MESSAGE_ARTICLES = new Set(['SOP 第 2 條', 'SOP 第 5 條', 'SOP 第 6 條']);
+
 function toBanner(a: SOPAlertDTO, timestamp: string): AlertBanner {
   return {
     id: `${a.article}-${a.triggered_by}-${timestamp}`,
@@ -28,6 +33,7 @@ function toBanner(a: SOPAlertDTO, timestamp: string): AlertBanner {
     timestamp,
     sopArticle: a.article,
     dismissed: false,
+    eventId: CMS_MESSAGE_ARTICLES.has(a.article) ? a.triggered_by : undefined,
   };
 }
 

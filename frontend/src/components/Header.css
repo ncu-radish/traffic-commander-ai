@@ -10,8 +10,12 @@
   align-items: center;
   gap: var(--space-5);
   padding: 0 var(--space-4);
-  background: var(--surface-sunken);
-  border-bottom: 1px solid var(--line);
+  /* 校方=天空藍／家長=酪梨綠，由 .app / .user-view 設定這兩個變數；
+     沒有設到（理論上不會發生）就退回原本中性色。底部一條淡淡的發光
+     邊線，讀起來像儀表板的通電指示，而不是純平面色塊。 */
+  background: var(--header-role-bg, var(--surface-sunken));
+  border-bottom: 2px solid var(--header-role-accent, var(--line));
+  box-shadow: 0 1px 12px -4px var(--header-role-accent, transparent);
   z-index: var(--z-header);
 }
 
@@ -122,6 +126,50 @@
   color: var(--text-primary);
 }
 
+/* Weather — same chip shell as the sim clock so the right cluster
+   reads as one instrument row. .is-a (severe) sets --status; the
+   border and figures follow it. */
+/* 這顆用 center 而非 .header__clock 的 baseline：裡面有 SVG 圖示，
+   baseline 會讓圖示往下掉。 */
+.header__weather {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px var(--space-2);
+  border: 1px solid var(--status-line, var(--line-faint));
+  border-radius: var(--radius-sm);
+  background: var(--status-soft, var(--surface-panel));
+  cursor: default;
+}
+
+/* 只在取不到天氣資料時出現，替代圖示的位置。 */
+.header__weather-label {
+  font-size: var(--text-xs);
+  color: var(--text-disabled);
+}
+
+/* Lucide 以 currentColor 描邊，顏色在這裡決定：平常次要文字色，
+   極端天氣時由 .is-a 的 --status 接手。 */
+.header__weather-icon {
+  flex-shrink: 0;
+  color: var(--status, var(--text-secondary));
+}
+
+.header__weather-cond {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.header__weather-temp {
+  font-size: var(--text-md);
+  color: var(--status, var(--text-primary));
+}
+
+.header__weather-temp--empty {
+  color: var(--text-disabled);
+}
+
 /* Counters */
 .header__counters {
   display: flex;
@@ -160,6 +208,8 @@
 
 @media (max-width: 1280px) {
   .header__health-label { display: none; }
+  /* 窄螢幕先捨棄天氣描述，溫度與極端天氣標記留著 —— 那兩個才是決策資訊。 */
+  .header__weather-cond { display: none; }
 }
 
 @media (max-width: 1024px) {

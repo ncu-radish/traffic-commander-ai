@@ -22,6 +22,7 @@ from app.data.repository import repository
 from app.services.sop_engine import check_article_2, check_article_5
 from app.services.route_planner import plan_routes
 from app.services.ete_calculator import calculate_ete
+from app.services.traffic_snapshot import snapshot_at
 from app.services.llm.base import LLMService
 from app.api.dependencies import get_llm_service
 
@@ -66,7 +67,8 @@ def generate_advisory(
     # Step 2: SOP article detection
     sop_articles = []
     reasoning_chain = []
-    cross_system_actions = []
+    cross_system_actions = []  # 本次事故（第2/5條）直接觸發的協調動作
+    concurrent_conditions = []  # 同一時間點另外偵測到、跟本次事故無因果關係的狀況
 
     art2 = check_article_2(incident)
     art5 = check_article_5(incident)
@@ -109,12 +111,20 @@ def generate_advisory(
     route_plan = None
     if art2 and affected_segment.startswith("RD_"):
         road_network = repository.get_road_network_raw()
-        # Get traffic data at the incident timestamp
+        # As-of snapshot rather than an exact-timestamp filter: the feed is
+        # sparse, so most timestamps don't have a reading for every segment,
+        # which would leave candidates missing and silently break the
+        # "lowest saturation wins" tie-break.
         traffic_df = repository.get_traffic_flow_df()
-        ts_traffic = traffic_df[traffic_df["Timestamp"] == timestamp]
+        ts_traffic = snapshot_at(traffic_df, timestamp)
         traffic_records = ts_traffic.to_dict("records") if not ts_traffic.empty else []
 
-        route_plan = plan_routes(affected_segment, road_network, traffic_records)
+        route_plan = plan_routes(
+            affected_segment,
+            road_network,
+            traffic_records,
+            incident_location=incident.get("location"),
+        )
 
         reasoning_chain.append(ReasoningStep(
             step=step_num,
@@ -135,12 +145,10 @@ def generate_advisory(
     seg_evidence: Optional[Dict[str, Any]] = None
     if affected_segment.startswith("RD_"):
         traffic_df = repository.get_traffic_flow_df()
-        seg_rows = traffic_df[traffic_df["Segment_ID"] == affected_segment]
-        if timestamp:
-            as_of = seg_rows[seg_rows["Timestamp"] <= timestamp]
-            seg_rows = as_of if not as_of.empty else seg_rows
-        if not seg_rows.empty:
-            row = seg_rows.sort_values("Timestamp").iloc[-1]
+        ts_traffic = snapshot_at(traffic_df, timestamp)
+        seg_data = ts_traffic[ts_traffic["Segment_ID"] == affected_segment]
+        if not seg_data.empty:
+            row = seg_data.iloc[-1]
             avg_saturation = float(row["Saturation_Score"])
             seg_evidence = {
                 "road_name": row.get("Road_Name", affected_segment),
@@ -164,19 +172,43 @@ def generate_advisory(
     step_num += 1
 
     # Step 5: Check crowd impacts
+    # 第3/4條的觸發條件只看「當下時間點」的人流資料，跟本次事故（第2/5條，
+    # 看的是incident本身）完全是兩條獨立規則。剛好同一時間點都成立時，
+    # 不能算進 cross_system_actions（那是「本次事故要求的協調」），
+    # 只能算「同時偵測到的其他狀況」，報告要誠實區分開，不能暗示因果關係。
     crowd_df = repository.get_crowd_density_df()
     if timestamp and not crowd_df.empty:
         from app.services.sop_engine import check_article_3, check_article_4
         crowd_alerts = check_article_3(crowd_df, timestamp)
         if crowd_alerts:
             sop_articles.append("SOP 第 3 條")
-            cross_system_actions.append("通知捷運 BL17 站啟動過站不停")
-            cross_system_actions.append("通知客運業者派遣接駁巴士")
+            concurrent_conditions.append("（同時偵測，非本次事故觸發）通知捷運 BL17 站啟動過站不停")
+            concurrent_conditions.append("（同時偵測，非本次事故觸發）通知客運業者派遣接駁巴士")
+            reasoning_chain.append(ReasoningStep(
+                step=step_num,
+                title="同時偵測：SOP 第 3 條門檻（與本次事故無因果關係）",
+                description=(
+                    "此判定只看事故發生當下時間點的 BL17 站人流資料，"
+                    "跟本次事故的地點/成因無關，只是剛好同一時間點成立。"
+                ),
+                sop_reference="SOP 第 3 條：捷運與接駁分流",
+            ))
+            step_num += 1
 
         dome_alerts = check_article_4(crowd_df, timestamp)
         if dome_alerts:
             sop_articles.append("SOP 第 4 條")
-            cross_system_actions.append("大巨蛋散場機制已啟動，連結接駁分流")
+            concurrent_conditions.append("（同時偵測，非本次事故觸發）大巨蛋散場機制已啟動，連結接駁分流")
+            reasoning_chain.append(ReasoningStep(
+                step=step_num,
+                title="同時偵測：SOP 第 4 條門檻（與本次事故無因果關係）",
+                description=(
+                    "此判定只看事故發生當下時間點的大巨蛋人流資料，"
+                    "跟本次事故的地點/成因無關，只是剛好同一時間點成立。"
+                ),
+                sop_reference="SOP 第 4 條：大巨蛋散場啟動",
+            ))
+            step_num += 1
 
     # Determine alert level
     alert_level = "A" if art2 else ("B" if art5 else "normal")
@@ -228,8 +260,10 @@ def generate_advisory(
             f"警報等級：{alert_level}\n"
             f"主要疏散路線：{route_plan.primary_route_name if route_plan else '不適用'}\n"
             f"ETE 預估恢復：{ete.ete_minutes} 分鐘\n"
-            f"跨系統協調：{'; '.join(cross_system_actions) if cross_system_actions else '無'}\n\n"
-            f"請用中文撰寫，語氣正式但簡潔。"
+            f"本次事故要求之跨系統協調：{'; '.join(cross_system_actions) if cross_system_actions else '無'}\n"
+            f"同一時間點另外偵測到、與本次事故無關的狀況：{'; '.join(concurrent_conditions) if concurrent_conditions else '無'}\n\n"
+            f"請用中文撰寫，語氣正式但簡潔。若有「同一時間點另外偵測到」的狀況，"
+            f"請明確說明那是另外偵測到的，不是本次事故造成的，避免暗示因果關係。"
         )
         llm_response = llm_service.generate_chat_response(
             ChatRequest(message=summary_prompt)
@@ -247,6 +281,7 @@ def generate_advisory(
         route_plan=route_plan,
         ete=ete,
         cross_system_actions=cross_system_actions,
+        concurrent_conditions=concurrent_conditions,
         reasoning_chain=reasoning_chain,
         llm_summary=llm_summary,
     )
