@@ -244,7 +244,7 @@ export default function UserView({ onBack }: UserViewProps) {
             onInjectIncident={handleInjectIncident}
           />
 
-          <TrendSummaryCard />
+          <TrendSummaryCard currentTimestamp={currentTimestamp} />
 
           {/* 與校方端同一組 .chart-card 外框與同兩個圖表元件，
               尺寸、間距、顏色、hover 與 tooltip 全部沿用，這裡只是

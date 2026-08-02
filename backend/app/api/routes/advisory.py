@@ -9,6 +9,7 @@ Workflow:
 5. LLM generates natural language advisory report
 6. Return structured AdvisoryReport
 """
+import re
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends
@@ -48,47 +49,42 @@ _TREND_STATIONS = {
 
 @router.get("/trend-summary", response_model=TrendSummaryResponse)
 def generate_trend_summary(
+    timestamp: Optional[str] = None,
     llm_service: LLMService = Depends(get_llm_service),
 ):
     """
     車流飽和度趨勢 / 人流密度趨勢兩張圖表的 LLM 摘要。
-    事實（首尾值、峰值、是否達門檻）在這裡用 Python 算好，LLM 只負責
-    把已經算好的事實寫成一段中文摘要，避免像多語簡訊那次一樣讓 LLM
-    自己編數字。
+    讀的是「timestamp 當下」的 as-of snapshot（不是整段時間的首尾/尖峰），
+    所以時間軸移動到哪，摘要就反映當下哪裡壅塞——不是固定不變的總覽。
+    事實（各路段/場站當下數值、是否達門檻）在這裡用 Python 算好，LLM 只
+    負責把已經算好的事實寫成一句話，避免像多語簡訊那次一樣讓 LLM 自己編數字。
     """
     traffic_facts: list[str] = []
     traffic_df = repository.get_traffic_flow_df()
     if not traffic_df.empty:
+        ts_traffic = snapshot_at(traffic_df, timestamp) if timestamp else traffic_df
         for seg_id, seg_name in _TREND_SEGMENTS.items():
-            seg_data = traffic_df[traffic_df["Segment_ID"] == seg_id].sort_values("Timestamp")
-            if seg_data.empty:
+            row = ts_traffic[ts_traffic["Segment_ID"] == seg_id]
+            if row.empty:
                 continue
-            first_sat = float(seg_data.iloc[0]["Saturation_Score"])
-            last_sat = float(seg_data.iloc[-1]["Saturation_Score"])
-            peak_row = seg_data.loc[seg_data["Saturation_Score"].idxmax()]
-            peak_sat = float(peak_row["Saturation_Score"])
-
-            fact = f"{seg_name}：飽和度從 {first_sat:.2f} 變化到 {last_sat:.2f}，尖峰 {peak_sat:.2f}"
-            if peak_sat >= 0.95:
+            sat = float(row.iloc[-1]["Saturation_Score"])
+            fact = f"{seg_name}：目前飽和度 {sat:.2f}"
+            if sat >= 0.95:
                 fact += "（已達 A 級門檻）"
-            elif peak_sat >= 0.85:
+            elif sat >= 0.85:
                 fact += "（已達 B 級門檻）"
             traffic_facts.append(fact)
 
     crowd_facts: list[str] = []
     crowd_df = repository.get_crowd_density_df()
     if not crowd_df.empty:
+        ts_crowd = snapshot_at(crowd_df, timestamp, id_col="BS_ID") if timestamp else crowd_df
         for bs_id, st_name in _TREND_STATIONS.items():
-            st_data = crowd_df[crowd_df["BS_ID"] == bs_id].sort_values("Timestamp")
-            if st_data.empty:
+            row = ts_crowd[ts_crowd["BS_ID"] == bs_id]
+            if row.empty:
                 continue
-            first_count = int(st_data.iloc[0]["User_Count"])
-            last_count = int(st_data.iloc[-1]["User_Count"])
-            peak_row = st_data.loc[st_data["User_Count"].idxmax()]
-            peak_count = int(peak_row["User_Count"])
-            crowd_facts.append(
-                f"{st_name}：人數從 {first_count:,} 變化到 {last_count:,}，尖峰 {peak_count:,} 人"
-            )
+            count = int(row.iloc[-1]["User_Count"])
+            crowd_facts.append(f"{st_name}：目前人數 {count:,} 人")
 
     # 本地小模型即使給了完整清單也常常把路段跟場站搞混、加因果臆測、或
     # 自己加標題。縮小輸入只給「最極端的一條路段+一個場站」與門檻計數，
@@ -96,29 +92,39 @@ def generate_trend_summary(
     summary = None
     peak_seg_fact = max(
         traffic_facts,
-        key=lambda f: float(f.split("尖峰 ")[1][:4]),
+        key=lambda f: float(f.split("目前飽和度 ")[1][:4]),
         default=None,
     )
     peak_station_fact = max(
         crowd_facts,
-        key=lambda f: int(f.split("尖峰 ")[1].split(" 人")[0].replace(",", "")),
+        key=lambda f: int(f.split("目前人數 ")[1].split(" 人")[0].replace(",", "")),
         default=None,
     )
     congested_count = sum(1 for f in traffic_facts if "已達" in f)
 
     if peak_seg_fact or peak_station_fact:
-        try:
-            lines = []
-            if peak_seg_fact:
-                lines.append(f"車流飽和度最高的路段：{peak_seg_fact}")
-            if congested_count:
-                lines.append(f"目前共有 {congested_count} 條路段達到壅擠門檻")
-            if peak_station_fact:
-                lines.append(f"人流密度最高的場站：{peak_station_fact}")
+        lines = []
+        if peak_seg_fact:
+            lines.append(f"目前車流飽和度最高的路段：{peak_seg_fact}")
+        if congested_count:
+            lines.append(f"目前共有 {congested_count} 條路段達到壅擠門檻")
+        if peak_station_fact:
+            lines.append(f"目前人流密度最高的場站：{peak_station_fact}")
 
+        # 這顆本地小模型測下來即使給了明確指示，還是偶爾會編出清單裡沒有的
+        # 數字（例如自己加一個「500多輛」、把場站說成別的名字）。與其只靠
+        # prompt教它，這裡直接驗證：LLM輸出裡出現的每一個數字都必須能在
+        # 給它的事實清單裡找到，抓到不在清單裡的數字就整句丟掉、改用
+        # 事實清單直接拼成的保底句子，確保顯示的內容一定跟真實數據一致。
+        fallback_summary = "；".join(lines) + "。"
+        allowed_numbers = set(re.findall(r"\d+(?:\.\d+)?", "\n".join(lines).replace(",", "")))
+
+        summary = fallback_summary
+        try:
             prompt = (
                 "請把以下已經算好的數據寫成一句話中文摘要（不超過50字，"
-                "純文字、不要標題、不要條列、不要markdown符號）。"
+                "純文字、不要標題、不要條列、不要markdown符號、全部使用"
+                "繁體中文、不可以夾雜任何英文單字）。"
                 "只能使用下面列出的數字，不可以自己編造數字，也不可以推測"
                 "路段與場站之間有因果關係。\n\n" + "\n".join(lines)
             )
@@ -131,9 +137,13 @@ def generate_trend_summary(
                 for ln in llm_response.reply.splitlines()
                 if ln.strip() and not ln.strip().startswith("#")
             ]
-            summary = " ".join(raw_lines) if raw_lines else None
+            llm_summary = " ".join(raw_lines) if raw_lines else None
+            if llm_summary:
+                reply_numbers = set(re.findall(r"\d+(?:\.\d+)?", llm_summary.replace(",", "")))
+                if reply_numbers.issubset(allowed_numbers):
+                    summary = llm_summary
         except Exception:
-            summary = None
+            pass
 
     return TrendSummaryResponse(
         summary=summary,

@@ -318,7 +318,7 @@ function App({ onBack }: AppProps) {
             />
           </div>
 
-          <TrendSummaryCard />
+          <TrendSummaryCard currentTimestamp={currentTimestamp} />
 
           <div className="chart-row">
             <div className="chart-card">

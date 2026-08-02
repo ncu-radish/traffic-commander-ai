@@ -1,8 +1,12 @@
 import { useTrendSummary } from '../hooks/useTrendSummary';
 import './TrendSummaryCard.css';
 
-export default function TrendSummaryCard() {
-  const state = useTrendSummary();
+interface TrendSummaryCardProps {
+  currentTimestamp: string;
+}
+
+export default function TrendSummaryCard({ currentTimestamp }: TrendSummaryCardProps) {
+  const state = useTrendSummary(currentTimestamp);
 
   return (
     <div className="chart-card trend-summary-card">
