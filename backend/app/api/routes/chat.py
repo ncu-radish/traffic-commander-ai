@@ -384,7 +384,7 @@ def chat_with_agent(
     llm_service: LLMService = Depends(get_llm_service),
 ):
     """
-    Send a message to the Traffic Commander AI and get a response.
+    Send a message to the 牽牽 and get a response.
     Automatically retrieves relevant SOP clauses via RAG before answering.
     Injects real-time data so the LLM can ground its answers in facts.
     """

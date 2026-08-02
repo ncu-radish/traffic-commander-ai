@@ -1,7 +1,7 @@
 {
-  "name": "交通指揮官 AI",
-  "short_name": "交通指揮官",
-  "description": "城市應變指揮官 AI Agent - 智慧交通指揮決策中樞",
+  "name": "牽牽｜智慧交通決策系統",
+  "short_name": "牽牽",
+  "description": "牽牽 - 信義計畫區智慧交通決策系統，即時感知與動態應變",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0b0b0d",

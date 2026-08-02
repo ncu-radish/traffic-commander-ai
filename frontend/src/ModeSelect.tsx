@@ -11,10 +11,10 @@ export default function ModeSelect({ onSelect }: ModeSelectProps) {
         <img
           className="mode-select__logo"
           src="/favicon.svg"
-          alt="交通指揮官 AI 標誌"
+          alt="牽牽標誌"
         />
-        <span className="mode-select__eyebrow">Traffic Commander AI</span>
-        <h1>信義計畫區 交通決策系統</h1>
+        <span className="mode-select__eyebrow">智慧交通決策系統</span>
+        <h1>牽牽</h1>
         <p>請選擇要進入的視角</p>
       </div>
 
