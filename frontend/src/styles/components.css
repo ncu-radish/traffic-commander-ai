@@ -94,6 +94,8 @@
   width: 2px;
   border-radius: 1px;
   background: var(--status, var(--line-strong));
+  /* 科技感讀數指示燈：狀態色本身淡淡發光，而不是純平面色塊。 */
+  box-shadow: 0 0 6px 0 var(--status-line, transparent);
 }
 
 .dot {
@@ -103,6 +105,7 @@
   flex-shrink: 0;
   display: inline-block;
   background: var(--status, var(--text-muted));
+  box-shadow: 0 0 5px 0 var(--status-line, transparent);
 }
 
 .dot--live,
@@ -113,6 +116,7 @@
   flex-shrink: 0;
   display: inline-block;
   background: var(--level-ok);
+  box-shadow: 0 0 5px 0 var(--level-ok-line);
   animation: breathe 2.6s ease-in-out infinite;
 }
 
@@ -132,6 +136,7 @@
   font-weight: 600;
   letter-spacing: 0.02em;
   line-height: 1.5;
+  box-shadow: 0 0 8px -2px var(--status-line, transparent);
   white-space: nowrap;
 }
 
