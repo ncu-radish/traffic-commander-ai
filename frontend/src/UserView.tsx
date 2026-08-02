@@ -16,7 +16,12 @@ import { useAdvisoryReport } from './hooks/useAdvisoryReport';
 import { API_BASE } from './config/api';
 import { COMMUTE_ROUTES, COMMUTE_ORIGIN, COMMUTE_DESTINATION } from './data/commuteRoutes';
 import { assessCommuteRoutes } from './services/commuteRouteRisk';
-import { useStudents } from './state/studentStore';
+import {
+  PARENT_CHILD_ID,
+  dropOffEventId,
+  dropOffNotificationId,
+  useStudents,
+} from './state/studentStore';
 import './UserView.css';
 
 interface UserViewProps {
@@ -52,6 +57,31 @@ export default function UserView({ onBack }: UserViewProps) {
    * 通知卡片會是同一個結果，切換角色也不會消失。
    */
   const { students, timelineEvents, notifications, dismissNotification } = useStudents();
+
+  /**
+   * 家長端只呈現自己的孩子（PARENT_CHILD_ID）。校方端名單維持多位學生，
+   * 老師照樣逐一確認下車，但這裡把其他學生的名單列、時間軸事件與通知
+   * 都濾掉，家長不會看到別人家孩子的下車資訊。
+   *
+   * 時間軸與通知採「排除其他學生」而非「只留自己的」，這樣未來新增的
+   * 非學生事件（例如事故注入）不會被一併濾掉。
+   */
+  const otherChildIds = useMemo(
+    () => students.filter((s) => s.id !== PARENT_CHILD_ID).map((s) => s.id),
+    [students],
+  );
+  const myStudents = useMemo(
+    () => students.filter((s) => s.id === PARENT_CHILD_ID),
+    [students],
+  );
+  const myTimelineEvents = useMemo(() => {
+    const excluded = new Set(otherChildIds.map(dropOffEventId));
+    return timelineEvents.filter((e) => !excluded.has(e.id));
+  }, [timelineEvents, otherChildIds]);
+  const myNotifications = useMemo(() => {
+    const excluded = new Set(otherChildIds.map(dropOffNotificationId));
+    return notifications.filter((n) => !excluded.has(n.id));
+  }, [notifications, otherChildIds]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -212,8 +242,8 @@ export default function UserView({ onBack }: UserViewProps) {
 
         <aside className="user-view__sidebar">
           <ParentStudentPanel
-            students={students}
-            notifications={notifications}
+            students={myStudents}
+            notifications={myNotifications}
             onDismissNotification={dismissNotification}
           />
           <CongestedSegmentsPanel trafficData={currentTraffic} />
@@ -256,7 +286,7 @@ export default function UserView({ onBack }: UserViewProps) {
           onTimestampChange={setCurrentTimestamp}
           onPlayToggle={() => setIsPlaying((p) => !p)}
           breaches={timelineBreaches}
-          events={timelineEvents}
+          events={myTimelineEvents}
         />
       </div>
 

@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { ChatMessage } from '../types';
 import { API_BASE } from '../config/api';
 import './ChatPanel.css';
@@ -199,7 +201,17 @@ function Message({ message }: { message: ChatMessage }) {
   return (
     <div className={`chat__msg ${isUser ? 'chat__msg--user' : 'chat__msg--ai'}`}>
       {!isUser && <span className="chat__msg-role">AI 指揮官</span>}
-      <div className="chat__msg-body">{message.content}</div>
+      <div className="chat__msg-body">
+        {isUser ? (
+          message.content
+        ) : (
+          <div className="markdown">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
+      </div>
       {message.sopReferences && message.sopReferences.length > 0 && (
         <div className="chat__msg-refs">
           {message.sopReferences.map((ref) => (

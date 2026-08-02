@@ -139,6 +139,149 @@
   line-height: var(--leading);
 }
 
+/* Rendered as Markdown; block elements handle their own spacing.
+   Shared .markdown styles live in ChatPanel.css (bundled globally). */
 .advisory-modal__summary {
-  white-space: pre-wrap;
+  white-space: normal;
+  text-align: left;
+}
+
+/* ── 排除路段與理由 ── */
+.advisory-modal__excluded {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.advisory-modal__excluded li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+}
+.advisory-modal__excluded-route {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.advisory-modal__excluded-reason {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: var(--leading);
+}
+
+/* ── 號誌配時調整表 ── */
+.advisory-modal__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+.advisory-modal__table th,
+.advisory-modal__table td {
+  padding: var(--space-2);
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+.advisory-modal__table th {
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.advisory-modal__table td {
+  color: var(--text-secondary);
+}
+
+/* ── AI 推理過程 stepper ── */
+.advisory-modal__steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.advisory-modal__step {
+  position: relative;
+  padding-left: var(--space-2);
+  border-left: 2px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.advisory-modal__step-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.advisory-modal__step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--surface-panel);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.advisory-modal__step-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.advisory-modal__step-desc {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  line-height: var(--leading);
+}
+.advisory-modal__step-evidence {
+  display: block;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface-raised);
+  padding: 4px var(--space-2);
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+}
+
+/* ── 端到端 SLA 佐證 ── */
+.advisory-modal__sla {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  border: 1px solid var(--line);
+}
+.advisory-modal__sla--ok {
+  background: var(--level-ok-soft);
+  border-color: var(--level-ok-line);
+}
+.advisory-modal__sla--warn {
+  background: var(--level-b-soft);
+  border-color: var(--level-b-line);
+}
+.advisory-modal__sla-value {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.advisory-modal__sla--ok .advisory-modal__sla-note {
+  color: var(--level-ok);
+  font-weight: 600;
+}
+.advisory-modal__sla--warn .advisory-modal__sla-note {
+  color: var(--level-b);
+  font-weight: 600;
 }

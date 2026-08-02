@@ -103,7 +103,7 @@ class AdvisoryRequest(BaseModel):
 
 class MultiLangMessages(BaseModel):
     zh: str
-    en: str
+    en: Optional[str] = None
     ja: Optional[str] = None
     ko: Optional[str] = None
 
