@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { LiveIncident, AlertBanner, AlertLevel } from '../types';
-
-const API_BASE = 'http://localhost:8000/api';
+import { API_BASE } from '../config/api';
 
 interface SOPAlertDTO {
   article: string;

@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
-
-const API_BASE = 'http://localhost:8000/api';
+import { API_BASE } from '../config/api';
 
 export interface AdvisoryReportDTO {
   event_id: string;
