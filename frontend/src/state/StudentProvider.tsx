@@ -3,6 +3,8 @@ import type { ReactNode } from 'react';
 import {
   INITIAL_STUDENTS,
   StudentContext,
+  dropOffEventId,
+  dropOffNotificationId,
   toClockTime,
 } from './studentStore';
 import type {
@@ -30,8 +32,8 @@ export function StudentProvider({ children }: { children: ReactNode }) {
       if (!target || target.status === 'droppedOff') return;
 
       const clockTime = toClockTime(timestamp);
-      const eventId = `evt-dropoff-${studentId}`;
-      const notificationId = `notif-dropoff-${studentId}`;
+      const eventId = dropOffEventId(studentId);
+      const notificationId = dropOffNotificationId(studentId);
 
       setStudents((prev) =>
         prev.map((s) =>

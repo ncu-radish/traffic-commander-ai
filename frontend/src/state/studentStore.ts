@@ -91,6 +91,21 @@ export const INITIAL_STUDENTS: StudentRecord[] = [
   },
 ];
 
+/**
+ * 家長端登入後綁定的孩子。校方端（App.tsx）是校車名單，看得到全部學生；
+ * 家長只該看到自己的孩子，所以家長端一律以這個 id 過濾名單、時間軸事件
+ * 與通知。要換示範對象只改這一行。
+ */
+export const PARENT_CHILD_ID = 'STU_001';
+
+/**
+ * 下車事件與通知的 id 慣例。寫成函式是為了讓產生端（StudentProvider）
+ * 與過濾端（家長端）共用同一組規則，不必各自拼字串。
+ */
+export const dropOffEventId = (studentId: string) => `evt-dropoff-${studentId}`;
+export const dropOffNotificationId = (studentId: string) =>
+  `notif-dropoff-${studentId}`;
+
 export interface StudentContextValue {
   students: StudentRecord[];
   timelineEvents: StudentTimelineEvent[];
