@@ -88,6 +88,29 @@
 .timeline__tick[data-level='A'] { background: var(--level-a); }
 .timeline__tick[data-level='B'] { background: var(--level-b); }
 
+/* ─── 事件標記 ────────────────────────────────────────────────────
+   與 .timeline__tick（SOP 門檻的細線）刻意不同形狀：菱形 + 苔綠色，
+   所以同一條軌道上「門檻」與「已發生的事件」分得開。 */
+.timeline__events {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.timeline__event {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  background: var(--level-ok);
+  border: 1px solid var(--surface-sunken);
+  transform: translateY(-50%) rotate(45deg);
+  /* 容器關閉指標事件，只有標記本身接收 hover 以顯示 title。 */
+  pointer-events: auto;
+  cursor: help;
+}
+
 .timeline__handle {
   position: absolute;
   top: 50%;

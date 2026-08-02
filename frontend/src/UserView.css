@@ -6,8 +6,8 @@
   background: var(--surface-base);
   color: var(--text-primary);
   font-family: var(--font-family);
-  /* 側邊欄佔340px+間距，抽籤按鈕固定在視窗右下角時要避開，不然會疊在事件卡片上。 */
-  --fortune-trigger-right: calc(340px + var(--space-3) + var(--space-6));
+  /* 側邊欄佔380px+間距，抽籤按鈕固定在視窗右下角時要避開，不然會疊在事件卡片上。 */
+  --fortune-trigger-right: calc(380px + var(--space-3) + var(--space-6));
 }
 
 .user-view--loading {
@@ -17,50 +17,19 @@
   color: var(--text-muted);
 }
 
-.user-view__header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3) var(--space-5);
-  border-bottom: 1px solid var(--line-faint);
-  background: var(--surface-panel);
-  flex: none;
-}
-
-.user-view__back {
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--text-secondary);
-  font-family: var(--font-family);
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-.user-view__back:hover {
-  border-color: var(--accent);
-  color: var(--text-primary);
-}
-
-.user-view__title {
-  font-size: var(--text-md);
-  font-weight: 700;
-  flex: 1;
-}
-
-.user-view__badge {
-  padding: 2px 10px;
-  border-radius: var(--radius-pill);
-  background: var(--accent-soft);
-  color: var(--accent-bright);
-  font-size: var(--text-xs);
-  font-weight: 600;
-}
+/* 最上方那一行直接用校方端的 <Header />，樣式來自 Header.css，
+   這裡不再另外定義，兩端才會完全一致。 */
 
 .user-view__body {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 340px;
+  /*
+   * 側邊欄 380px：校方端的圖表卡片在 2fr 的地圖欄裡並排，實際寬度約
+   * 380px。這裡給同樣的寬度，兩個趨勢圖的繪圖區與圖例換行才會跟校方端
+   * 一致（TrafficChart 的 grid.top 預留兩行圖例，欄位太窄圖例會多換一行
+   * 而壓到繪圖區）。
+   */
+  grid-template-columns: 1fr 380px;
   gap: var(--space-3);
   padding: var(--space-3);
   min-height: 0;
@@ -80,6 +49,12 @@
   gap: var(--space-3);
   overflow-y: auto;
   min-height: 0;
+}
+
+/* 側邊欄是 flex column，圖表卡片必須保持自身高度，
+   不能被壓縮或拉伸，否則 ECharts 的固定高度會失效。 */
+.user-view__sidebar > .chart-card {
+  flex: none;
 }
 
 @media (max-width: 900px) {

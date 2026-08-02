@@ -122,6 +122,16 @@
   white-space: nowrap;
 }
 
+/* 路線 2 與 3 有 74% 路徑重疊，需要一行字說明重疊處的虛線交錯。 */
+.map-legend__note {
+  margin-top: 3px;
+  max-width: 132px;
+  font-size: 9px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  white-space: normal;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    Popups — matte panel, not Leaflet's white default
    ═══════════════════════════════════════════════════════════════ */
