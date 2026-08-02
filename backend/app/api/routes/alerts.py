@@ -10,7 +10,7 @@ from app.models.schemas import (
     MultiLangMessages,
 )
 from app.data.repository import repository
-from app.services.sop_engine import check_all_sop_thresholds
+from app.services.sop_engine import check_all_sop_thresholds, check_article_2, check_article_5
 from app.services.route_planner import plan_routes
 from app.services.ete_calculator import calculate_ete
 from app.services.traffic_snapshot import snapshot_at
@@ -93,10 +93,31 @@ def generate_multilang_alert(
 
 
 def _build_incident_message(incident: dict, requested_ts: Optional[str]):
-    """SOP第2條b項格式：事故位置、改道指引、預計延誤時間、求援或避開提醒。"""
+    """
+    事故類型決定訊息格式，不是每種事件都適用「改道」：
+    - SOP第2條（道路封閉）：事故位置、改道指引、預計延誤時間、求援提醒。
+    - SOP第5條（號誌故障）：SOP條文自己就規定了固定格式——「<路段>號誌故障，
+      請依現場指揮通行」，本來就不是靠改道處理，講「改道」反而是錯的資訊。
+    """
     ts = requested_ts or incident.get("timestamp", "")
     affected_segment = incident.get("affected_segment", "")
     location = incident.get("location") or affected_segment
+
+    if check_article_5(incident) and not check_article_2(incident):
+        seg_info_5 = next(
+            (s for s in repository.get_road_network_raw() if s.get("segment_id") == affected_segment),
+            None,
+        )
+        # SOP第5條的CMS格式是「<路段>號誌故障」，用路段名稱而非事故位置
+        # 自由文字——location本身可能已經包含「號誌故障」字樣，兩個接在一起會重複。
+        road_name = seg_info_5.get("name") if seg_info_5 else location
+        zh_message = (
+            f"【號誌故障通報】{road_name}號誌故障，請依現場指揮通行，"
+            f"行經時請放慢車速並保持耐心；如遇緊急狀況請撥打 110 或 119 求援。"
+        )
+        nearby_station_ids = seg_info_5.get("nearby_stations", []) if seg_info_5 else []
+        return zh_message, *_check_article6_trigger(nearby_station_ids, ts)
+
     severity = incident.get("severity", "Medium")
 
     road_network = repository.get_road_network_raw()
@@ -130,6 +151,12 @@ def _build_incident_message(incident: dict, requested_ts: Optional[str]):
     seg_info = next((s for s in road_network if s.get("segment_id") == affected_segment), None)
     nearby_station_ids = seg_info.get("nearby_stations", []) if seg_info else []
 
+    trigger_stations, roaming_details = _check_article6_trigger(nearby_station_ids, ts)
+    return zh_message, trigger_stations, roaming_details
+
+
+def _check_article6_trigger(nearby_station_ids: list, ts: str):
+    """SOP第6條觸發判定：給定的基地台清單裡，是否有任一達 Roaming >= 30%。"""
     crowd_df = repository.get_crowd_density_df()
     crowd_snapshot = snapshot_at(crowd_df, ts, id_col="BS_ID")
 
@@ -143,7 +170,7 @@ def _build_incident_message(incident: dict, requested_ts: Optional[str]):
                 trigger_stations.append(row["BS_ID"])
                 roaming_details[row["BS_ID"]] = roaming
 
-    return zh_message, trigger_stations, roaming_details
+    return trigger_stations, roaming_details
 
 
 def _build_crowd_message(station_id: str, requested_ts: Optional[str]):
