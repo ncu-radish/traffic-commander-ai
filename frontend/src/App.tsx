@@ -10,9 +10,12 @@ import MetricsBar from './components/MetricsBar';
 import TimelineControl from './components/TimelineControl';
 import CommuteRoutePanel from './components/CommuteRoutePanel';
 import FortuneDraw from './components/FortuneDraw';
+import AdvisorySummaryModal from './components/AdvisorySummaryModal';
 import StudentRoster from './components/StudentRoster';
 import DropOffConfirmModal from './components/DropOffConfirmModal';
-import type { LiveIncident, AlertBanner, TrafficSegment, CrowdDensity, RoadSegment, AccidentHotspots } from './types';
+import type { LiveIncident, TrafficSegment, CrowdDensity, RoadSegment, AccidentHotspots } from './types';
+import { useSopAlerts } from './hooks/useSopAlerts';
+import { useAdvisoryReport } from './hooks/useAdvisoryReport';
 import { API_BASE } from './config/api';
 import { COMMUTE_ROUTES, COMMUTE_ORIGIN, COMMUTE_DESTINATION } from './data/commuteRoutes';
 import { assessCommuteRoutes } from './services/commuteRouteRisk';
@@ -34,7 +37,6 @@ function App({ onBack }: AppProps) {
   const [currentTimestamp, setCurrentTimestamp] = useState<string>('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [activeIncidents, setActiveIncidents] = useState<LiveIncident[]>([]);
-  const [alerts, setAlerts] = useState<AlertBanner[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -157,69 +159,18 @@ function App({ onBack }: AppProps) {
     return () => clearTimeout(timer);
   }, [isPlaying, currentTimestamp, availableTimestamps]);
 
-  // Check SOP thresholds and generate alerts
-  useEffect(() => {
-    const newAlerts: AlertBanner[] = [];
+  // SOP門檻警示——統一呼叫後端 /api/alerts/check，涵蓋全部7條SOP（含之前漏掉的
+  // 第4條大巨蛋散場、第5條號誌故障），跟家長版共用同一支 hook、同一套判定依據。
+  const { visibleAlerts, dismissAlert } = useSopAlerts(currentTimestamp, activeIncidents);
 
-    // SOP Article 1: Check saturation on trigger segments (RD_TPE_001, RD_TPE_002)
-    const triggerSegments = currentTraffic.filter(
-      (s) => s.segmentId === 'RD_TPE_001' || s.segmentId === 'RD_TPE_002'
-    );
-
-    triggerSegments.forEach((seg) => {
-      if (seg.saturationScore >= 0.95) {
-        newAlerts.push({
-          id: `alert-A-${seg.segmentId}-${currentTimestamp}`,
-          level: 'A',
-          title: `A 級癱瘓警報 — ${seg.roadName}`,
-          message: `飽和度 ${(seg.saturationScore * 100).toFixed(0)}%，已達 A 級癱瘓門檻。啟動替代路徑引導與長綠燈時制。`,
-          timestamp: currentTimestamp,
-          sopArticle: 'SOP 第 1 條',
-          dismissed: false,
-        });
-      } else if (seg.saturationScore >= 0.85) {
-        newAlerts.push({
-          id: `alert-B-${seg.segmentId}-${currentTimestamp}`,
-          level: 'B',
-          title: `B 級壅擠警報 — ${seg.roadName}`,
-          message: `飽和度 ${(seg.saturationScore * 100).toFixed(0)}%，已達 B 級壅擠門檻。建議啟動長綠燈時制。`,
-          timestamp: currentTimestamp,
-          sopArticle: 'SOP 第 1 條',
-          dismissed: false,
-        });
-      }
-    });
-
-    // SOP Article 3: Check BL17 crowd threshold
-    const bl17 = currentCrowd.find((c) => c.bsId === 'BS_MRT_BL17');
-    if (bl17 && (bl17.growthRate > 0.30 || bl17.userCount > 25000)) {
-      newAlerts.push({
-        id: `alert-crowd-BL17-${currentTimestamp}`,
-        level: 'A',
-        title: '捷運分流警報 — 國父紀念館站',
-        message: `人數 ${bl17.userCount.toLocaleString()}，成長率 ${(bl17.growthRate * 100).toFixed(0)}%。建議啟動過站不停與接駁分流。`,
-        timestamp: currentTimestamp,
-        sopArticle: 'SOP 第 3 條',
-        dismissed: false,
-      });
-    }
-
-    // SOP Article 6: Check roaming threshold (any station >= 30%)
-    const roamingStations = currentCrowd.filter((c) => c.roamingUserPct >= 0.30);
-    roamingStations.forEach((station) => {
-      newAlerts.push({
-        id: `alert-roaming-${station.bsId}-${currentTimestamp}`,
-        level: 'B',
-        title: `多語化通報觸發 — ${station.locationName}`,
-        message: `漫遊比率 ${(station.roamingUserPct * 100).toFixed(0)}%，已達 SOP 第 6 條門檻。需產出多國語言告警。`,
-        timestamp: currentTimestamp,
-        sopArticle: 'SOP 第 6 條',
-        dismissed: false,
-      });
-    });
-
-    setAlerts(newAlerts);
-  }, [currentTraffic, currentCrowd, currentTimestamp]);
+  // 事件注入時自動產出 AI 預警摘要（SOP判定 + 路線規劃 + ETE + LLM生成摘要）並跳出彈窗。
+  const {
+    report: advisoryReport,
+    loading: advisoryLoading,
+    open: advisoryModalOpen,
+    requestAdvisory,
+    close: closeAdvisory,
+  } = useAdvisoryReport();
 
   // Inject incident handler
   const handleInjectIncident = useCallback((incident: LiveIncident) => {
@@ -227,13 +178,8 @@ function App({ onBack }: AppProps) {
       if (prev.find((i) => i.eventId === incident.eventId)) return prev;
       return [...prev, incident];
     });
-  }, []);
-
-  const handleDismissAlert = useCallback((alertId: string) => {
-    setAlerts((prev) =>
-      prev.map((a) => (a.id === alertId ? { ...a, dismissed: true } : a))
-    );
-  }, []);
+    requestAdvisory(incident.eventId, incident.timestamp);
+  }, [requestAdvisory]);
 
   // Clicking a segment on the map focuses the advisory column.
   const handleSelectSegment = useCallback((segmentId: string) => {
@@ -260,8 +206,6 @@ function App({ onBack }: AppProps) {
     );
   }
 
-  const visibleAlerts = alerts.filter((a) => !a.dismissed);
-
   return (
     <div className="app">
       <Header
@@ -277,7 +221,7 @@ function App({ onBack }: AppProps) {
           <AlertBannerComponent
             key={alert.id}
             alert={alert}
-            onDismiss={() => handleDismissAlert(alert.id)}
+            onDismiss={() => dismissAlert(alert.id)}
           />
         ))}
       </div>
@@ -401,6 +345,13 @@ function App({ onBack }: AppProps) {
       </div>
 
       <FortuneDraw trafficData={currentTraffic} crowdData={currentCrowd} roadNetwork={roadNetwork} />
+
+      <AdvisorySummaryModal
+        open={advisoryModalOpen}
+        loading={advisoryLoading}
+        report={advisoryReport}
+        onClose={closeAdvisory}
+      />
 
       {pendingStudent && (
         <DropOffConfirmModal

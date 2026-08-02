@@ -22,9 +22,9 @@ export default function ModeSelect({ onSelect }: ModeSelectProps) {
         </button>
 
         <button className="mode-select__card mode-select__card--user" onClick={() => onSelect('parent')}>
-          <span className="mode-select__card-label">家長方</span>
+          <span className="mode-select__card-label">家長</span>
           <span className="mode-select__card-desc">
-            查看沿線壅塞與事故熱點，以及系統建議的上下學路線
+            壅塞路段與時間軸、事故熱點、事件注入與路線規劃，以及系統建議的上下學路線
           </span>
         </button>
       </div>

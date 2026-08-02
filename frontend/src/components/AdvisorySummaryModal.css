@@ -1,0 +1,144 @@
+/* ── 通用彈窗外框，原本跟 RoutePlanner 的事件檢查彈窗共用；
+   RoutePlanner 移除後這份 CSS 搬過來，AdvisorySummaryModal 是
+   現在唯一的使用者。 ── */
+.route-check-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 7, 15, 0.72);
+  backdrop-filter: blur(6px);
+  padding: var(--space-6);
+  animation: route-check-fade 200ms ease;
+}
+@keyframes route-check-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.route-check-modal {
+  width: min(440px, 100%);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+  animation: route-check-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes route-check-pop {
+  from { opacity: 0; transform: scale(0.92) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.route-check-modal h3 {
+  margin: var(--space-3) 0 var(--space-2);
+  font-size: var(--text-lg);
+  color: var(--text-primary);
+}
+
+.route-check-modal > p {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading);
+}
+
+.route-check-modal__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto;
+  border-radius: 50%;
+  font-size: var(--text-xl);
+  font-weight: 700;
+}
+.route-check-modal__icon--ok {
+  background: var(--level-ok-soft);
+  color: var(--level-ok);
+}
+.route-check-modal__icon--warn {
+  background: var(--level-a-soft);
+  color: var(--level-a);
+}
+
+.route-check-modal__advisory-list {
+  margin: 0 0 var(--space-4);
+  padding-left: 1.1em;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  text-align: left;
+}
+.route-check-modal__advisory-list li {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading);
+}
+
+.route-planner__btn {
+  width: 100%;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+.route-planner__btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+.route-planner__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.advisory-modal {
+  text-align: left;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+.advisory-modal h3 {
+  text-align: center;
+}
+.advisory-modal__body > .route-check-modal__icon {
+  margin: 0 auto var(--space-3);
+}
+
+.advisory-modal__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+  margin-bottom: var(--space-4);
+}
+
+.advisory-modal__section {
+  margin-bottom: var(--space-4);
+}
+.advisory-modal__section h4 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.advisory-modal__section p {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: var(--leading);
+}
+
+.advisory-modal__summary {
+  white-space: pre-wrap;
+}
