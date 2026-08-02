@@ -5,6 +5,8 @@ interface AdvisorySummaryModalProps {
   open: boolean;
   loading: boolean;
   report: AdvisoryReportDTO | null;
+  /** 端到端重規劃延遲（毫秒），用於顯示 60 秒 SLA 佐證。 */
+  elapsedMs?: number | null;
   onClose: () => void;
 }
 
@@ -13,7 +15,13 @@ interface AdvisorySummaryModalProps {
  * 視覺框架（AdvisorySummaryModal.css，z-index同量級），不用另外重新解決一次
  * 「彈窗被地圖蓋掉」的問題。
  */
-export default function AdvisorySummaryModal({ open, loading, report, onClose }: AdvisorySummaryModalProps) {
+export default function AdvisorySummaryModal({
+  open,
+  loading,
+  report,
+  elapsedMs,
+  onClose,
+}: AdvisorySummaryModalProps) {
   if (!open) return null;
 
   const levelClass =
@@ -55,6 +63,21 @@ export default function AdvisorySummaryModal({ open, loading, report, onClose }:
               ))}
             </div>
 
+            {typeof elapsedMs === 'number' && (
+              <div
+                className={`advisory-modal__sla ${
+                  elapsedMs <= 60000 ? 'advisory-modal__sla--ok' : 'advisory-modal__sla--warn'
+                }`}
+              >
+                <span className="advisory-modal__sla-value">
+                  端到端重規劃完成：{(elapsedMs / 1000).toFixed(1)} 秒
+                </span>
+                <span className="advisory-modal__sla-note">
+                  {elapsedMs <= 60000 ? '✓ 符合 60 秒 SLA' : '⚠ 超過 60 秒 SLA'}
+                </span>
+              </div>
+            )}
+
             <section className="advisory-modal__section">
               <h4>AI 摘要</h4>
               <p className="advisory-modal__summary">
@@ -71,6 +94,44 @@ export default function AdvisorySummaryModal({ open, loading, report, onClose }:
                     <> ・次要：{report.route_plan.secondary_routes.join('、')}</>
                   )}
                 </p>
+              </section>
+            )}
+
+            {report.route_plan?.excluded_routes && report.route_plan.excluded_routes.length > 0 && (
+              <section className="advisory-modal__section">
+                <h4>排除路段與理由</h4>
+                <ul className="advisory-modal__excluded">
+                  {report.route_plan.excluded_routes.map((ex, i) => (
+                    <li key={i}>
+                      <span className="advisory-modal__excluded-route">{ex.route}</span>
+                      <span className="advisory-modal__excluded-reason">{ex.reason}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {report.route_plan?.signal_adjustments && report.route_plan.signal_adjustments.length > 0 && (
+              <section className="advisory-modal__section">
+                <h4>號誌配時調整</h4>
+                <table className="advisory-modal__table">
+                  <thead>
+                    <tr>
+                      <th>路段</th>
+                      <th>調整</th>
+                      <th>時段</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.route_plan.signal_adjustments.map((s, i) => (
+                      <tr key={i}>
+                        <td>{s.road}</td>
+                        <td>{s.adjustment}</td>
+                        <td>{s.period}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </section>
             )}
 
@@ -92,6 +153,29 @@ export default function AdvisorySummaryModal({ open, loading, report, onClose }:
                     <li key={i}>{action}</li>
                   ))}
                 </ul>
+              </section>
+            )}
+
+            {report.reasoning_chain.length > 0 && (
+              <section className="advisory-modal__section">
+                <h4>AI 推理過程</h4>
+                <ol className="advisory-modal__steps">
+                  {report.reasoning_chain.map((step) => (
+                    <li key={step.step} className="advisory-modal__step">
+                      <div className="advisory-modal__step-head">
+                        <span className="advisory-modal__step-num">{step.step}</span>
+                        <span className="advisory-modal__step-title">{step.title}</span>
+                      </div>
+                      <p className="advisory-modal__step-desc">{step.description}</p>
+                      {step.data_evidence && (
+                        <code className="advisory-modal__step-evidence">{step.data_evidence}</code>
+                      )}
+                      {step.sop_reference && (
+                        <span className="badge badge-neutral">{step.sop_reference}</span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
               </section>
             )}
 
