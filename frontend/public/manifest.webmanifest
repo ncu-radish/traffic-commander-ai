@@ -1,0 +1,17 @@
+{
+  "name": "交通指揮官 AI",
+  "short_name": "交通指揮官",
+  "description": "城市應變指揮官 AI Agent - 智慧交通指揮決策中樞",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b0b0d",
+  "theme_color": "#ab050b",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
