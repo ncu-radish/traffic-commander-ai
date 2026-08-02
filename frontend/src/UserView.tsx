@@ -186,6 +186,7 @@ export default function UserView({ onBack }: UserViewProps) {
             key={alert.id}
             alert={alert}
             onDismiss={() => dismissAlert(alert.id)}
+            publicView
           />
         ))}
       </div>
