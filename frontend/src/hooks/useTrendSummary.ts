@@ -20,8 +20,11 @@ const DEBOUNCE_MS = 900;
  * 車流飽和度趨勢／人流密度趨勢兩張圖表的LLM摘要。事實（當下各路段/場站
  * 是否達門檻）由後端算好；LLM只負責把事實寫成一句話。不用手動按鈕，
  * 時間軸移動到哪就自動反映當下哪裡壅塞。
+ *
+ * publicView=true（家長端）時後端不會附「建議措施」——那是交控中心/警力
+ * 的內部調度指示，家長只需要知道哪裡壅塞。
  */
-export function useTrendSummary(currentTimestamp: string) {
+export function useTrendSummary(currentTimestamp: string, publicView?: boolean) {
   const [state, setState] = useState<TrendSummaryState>({ status: 'loading' });
 
   useEffect(() => {
@@ -30,7 +33,9 @@ export function useTrendSummary(currentTimestamp: string) {
 
     const timer = setTimeout(() => {
       setState({ status: 'loading' });
-      const url = `${API_BASE}/advisory/trend-summary?timestamp=${encodeURIComponent(currentTimestamp)}`;
+      const params = new URLSearchParams({ timestamp: currentTimestamp });
+      if (publicView) params.set('public', 'true');
+      const url = `${API_BASE}/advisory/trend-summary?${params.toString()}`;
       fetch(url)
         .then((res) => (res.ok ? res.json() : null))
         .then((data: TrendSummaryDTO | null) => {
@@ -50,7 +55,7 @@ export function useTrendSummary(currentTimestamp: string) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [currentTimestamp]);
+  }, [currentTimestamp, publicView]);
 
   return state;
 }
