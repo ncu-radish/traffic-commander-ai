@@ -87,7 +87,8 @@
   background: rgba(18, 18, 20, 0.88);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border: 1px solid var(--line-faint);
+  /* 同 .map-route-toggle：深色底上 --line-faint 太淡，改用 --line-strong。 */
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   box-shadow: var(--shadow), var(--sheen-top);
   pointer-events: none;
@@ -314,7 +315,9 @@
   background: rgba(18, 18, 20, 0.86);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  border: 1px solid var(--line);
+  /* 深色底上單靠 --line 太淡幾乎看不見邊框，這裡固定用亮一階的
+     --line-strong 當預設邊框，而不是只有 hover 才變亮。 */
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   color: var(--text-secondary);
   font-family: var(--font-family);
@@ -322,18 +325,20 @@
   font-weight: 600;
   letter-spacing: 0.04em;
   cursor: pointer;
-  transition: border-color var(--ease), color var(--ease), background var(--ease);
+  transition: border-color var(--ease), color var(--ease), background var(--ease), box-shadow var(--ease);
 }
 
 .map-route-toggle:hover {
-  border-color: var(--line-strong);
+  border-color: var(--accent-bright);
   color: var(--text-primary);
+  box-shadow: 0 0 10px -2px var(--accent-line);
 }
 
 .map-route-toggle[data-active='true'] {
-  border-color: var(--accent-line);
+  border-color: var(--accent-bright);
   background: rgba(18, 18, 20, 0.92);
   color: var(--accent-bright);
+  box-shadow: 0 0 10px -2px var(--accent-line);
 }
 
 .map-route-toggle:focus-visible {
