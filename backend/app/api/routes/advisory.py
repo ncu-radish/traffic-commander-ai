@@ -102,6 +102,17 @@ def generate_trend_summary(
     )
     congested_count = sum(1 for f in traffic_facts if "已達" in f)
 
+    # 解決方法不讓LLM自己想——直接沿用SOP第1條已經定義好的A/B級標準動作
+    # （app/services/sop_engine.py check_article_1），跟事故建議書用的是
+    # 同一套文字，確保「趨勢摘要」講的因應措施跟系統其他地方一致。
+    action_fact = None
+    if peak_seg_fact:
+        peak_sat_value = float(peak_seg_fact.split("目前飽和度 ")[1][:4])
+        if peak_sat_value >= 0.95:
+            action_fact = "建議措施：啟動替代路徑引導（SOP第2條）、延長綠燈時相25%、派遣交通警察至關鍵路口"
+        elif peak_sat_value >= 0.85:
+            action_fact = "建議措施：延長綠燈時相25%、準備派遣交通警察"
+
     if peak_seg_fact or peak_station_fact:
         lines = []
         if peak_seg_fact:
@@ -110,6 +121,8 @@ def generate_trend_summary(
             lines.append(f"目前共有 {congested_count} 條路段達到壅擠門檻")
         if peak_station_fact:
             lines.append(f"目前人流密度最高的場站：{peak_station_fact}")
+        if action_fact:
+            lines.append(action_fact)
 
         # 這顆本地小模型測下來即使給了明確指示，還是偶爾會編出清單裡沒有的
         # 數字（例如自己加一個「500多輛」、把場站說成別的名字）。與其只靠
@@ -122,11 +135,12 @@ def generate_trend_summary(
         summary = fallback_summary
         try:
             prompt = (
-                "請把以下已經算好的數據寫成一句話中文摘要（不超過50字，"
+                "請把以下已經算好的數據寫成一段簡短中文摘要（不超過70字，"
                 "純文字、不要標題、不要條列、不要markdown符號、全部使用"
                 "繁體中文、不可以夾雜任何英文單字）。"
                 "只能使用下面列出的數字，不可以自己編造數字，也不可以推測"
-                "路段與場站之間有因果關係。\n\n" + "\n".join(lines)
+                "路段與場站之間有因果關係。如果有列出「建議措施」，請照抄"
+                "納入摘要最後，不可以自己改寫成別的建議。\n\n" + "\n".join(lines)
             )
             llm_response = llm_service.generate_chat_response(
                 ChatRequest(message=prompt)
