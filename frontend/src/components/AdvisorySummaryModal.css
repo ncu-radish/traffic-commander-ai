@@ -139,6 +139,9 @@
   line-height: var(--leading);
 }
 
+/* Rendered as Markdown; block elements handle their own spacing.
+   Shared .markdown styles live in ChatPanel.css (bundled globally). */
 .advisory-modal__summary {
-  white-space: pre-wrap;
+  white-space: normal;
+  text-align: left;
 }
