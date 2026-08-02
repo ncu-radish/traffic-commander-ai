@@ -33,7 +33,12 @@ export default function Header({
             ← 切換視角
           </button>
         )}
-        <span className="header__mark" aria-hidden="true" />
+        <img
+          className="header__logo"
+          src="/favicon.svg"
+          alt=""
+          aria-hidden="true"
+        />
         <div className="header__titles">
           <h1 className="header__title">交通指揮官 AI</h1>
           <span className="header__subtitle">Traffic Commander Agent</span>

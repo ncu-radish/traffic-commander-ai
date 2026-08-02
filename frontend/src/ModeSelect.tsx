@@ -8,6 +8,11 @@ export default function ModeSelect({ onSelect }: ModeSelectProps) {
   return (
     <div className="mode-select">
       <div className="mode-select__intro">
+        <img
+          className="mode-select__logo"
+          src="/favicon.svg"
+          alt="交通指揮官 AI 標誌"
+        />
         <span className="mode-select__eyebrow">Traffic Commander AI</span>
         <h1>信義計畫區 交通決策系統</h1>
         <p>請選擇要進入的視角</p>
