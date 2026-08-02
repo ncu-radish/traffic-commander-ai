@@ -90,23 +90,48 @@ def generate_trend_summary(
                 f"{st_name}：人數從 {first_count:,} 變化到 {last_count:,}，尖峰 {peak_count:,} 人"
             )
 
+    # 本地小模型即使給了完整清單也常常把路段跟場站搞混、加因果臆測、或
+    # 自己加標題。縮小輸入只給「最極端的一條路段+一個場站」與門檻計數，
+    # 大幅降低模型能自由發揮、產生混淆內容的空間。
     summary = None
-    if traffic_facts or crowd_facts:
+    peak_seg_fact = max(
+        traffic_facts,
+        key=lambda f: float(f.split("尖峰 ")[1][:4]),
+        default=None,
+    )
+    peak_station_fact = max(
+        crowd_facts,
+        key=lambda f: int(f.split("尖峰 ")[1].split(" 人")[0].replace(",", "")),
+        default=None,
+    )
+    congested_count = sum(1 for f in traffic_facts if "已達" in f)
+
+    if peak_seg_fact or peak_station_fact:
         try:
+            lines = []
+            if peak_seg_fact:
+                lines.append(f"車流飽和度最高的路段：{peak_seg_fact}")
+            if congested_count:
+                lines.append(f"目前共有 {congested_count} 條路段達到壅擠門檻")
+            if peak_station_fact:
+                lines.append(f"人流密度最高的場站：{peak_station_fact}")
+
             prompt = (
-                "請根據以下已計算好的車流與人流趨勢數據，寫一段簡潔的中文摘要"
-                "（3-4句話，正式但不要條列）。規則：只能使用下面列出的數字，"
-                "不可以自己編造或估計未列出的數字；「車流飽和度趨勢」是道路路段的"
-                "數據，「人流密度趨勢」是場站的人潮數據，兩者是各自獨立的清單，"
-                "不可以把路段誤稱為場站、或把場站誤稱為路段，也不可以推測兩者之間"
-                "有因果關係。\n\n"
-                f"車流飽和度趨勢（道路路段）：\n" + "\n".join(traffic_facts) + "\n\n"
-                f"人流密度趨勢（場站）：\n" + "\n".join(crowd_facts)
+                "請把以下已經算好的數據寫成一句話中文摘要（不超過50字，"
+                "純文字、不要標題、不要條列、不要markdown符號）。"
+                "只能使用下面列出的數字，不可以自己編造數字，也不可以推測"
+                "路段與場站之間有因果關係。\n\n" + "\n".join(lines)
             )
             llm_response = llm_service.generate_chat_response(
                 ChatRequest(message=prompt)
             )
-            summary = llm_response.reply
+            # 安全網：即使叮嚀了還是可能夾雜markdown標題或條列符號，這裡濾掉。
+            raw_lines = [
+                ln.strip().lstrip("#-*• ")
+                for ln in llm_response.reply.splitlines()
+                if ln.strip() and not ln.strip().startswith("#")
+            ]
+            summary = " ".join(raw_lines) if raw_lines else None
         except Exception:
             summary = None
 
