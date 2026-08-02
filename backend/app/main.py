@@ -6,7 +6,7 @@ from app.api.routes import chat, traffic, advisory, alerts, weather, route
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="Backend API for Traffic Commander AI — Hackathon Project with dynamic LLM routing"
+    description="牽牽智慧交通決策系統後端 API，支援動態 LLM 路由"
 )
 
 # Enable CORS for frontend development
