@@ -9,52 +9,63 @@
  * Keep in sync with variables.css. Do not hardcode hex in components.
  */
 
-/** Matte-black surface ramp. */
+/**
+ * Rice-white surface ramp. This drives everything EXCEPT the map: the
+ * map (tiles + all its overlays) intentionally stays on the old dark
+ * matte palette — see the hardcoded dark values further down in
+ * `road`, which are independent of these tokens on purpose.
+ */
 export const surface = {
-  base: '#121214',
-  sunken: '#0E0E10',
-  panel: '#1C1D21',
-  raised: '#222328',
-  input: '#191A1E',
+  base: '#F7F2E6',
+  sunken: '#EEE6D2',
+  panel: '#FFFDF7',
+  raised: '#F1E9D9',
+  input: '#FBF7EC',
 } as const;
 
 /** Hairlines. Layering comes from lightness, never colour. */
 export const line = {
-  faint: '#23242A',
-  base: '#2A2B30',
-  strong: '#35363D',
+  faint: '#E7DEC7',
+  base: '#D9CDAD',
+  strong: '#C2B48C',
 } as const;
 
 export const text = {
-  primary: '#E8E8EA',
-  secondary: '#9A9CA3',
-  muted: '#6E7076',
-  disabled: '#4E5057',
+  primary: '#2A241B',
+  secondary: '#5B5240',
+  muted: '#837962',
+  disabled: '#ACA189',
 } as const;
 
 /**
- * Traffic-signal semantics, desaturated so they read as instrument
- * readouts rather than neon.
+ * Traffic-signal semantics. A/B are reserved colours — no other UI
+ * element may reuse them (see variables.css for the CSS-side note).
+ * Vivid enough to read on both the light chrome and the dark map.
  */
 export const level = {
-  /** A 級 — paralysed. Dimmed fire-hydrant red. */
-  a: '#B54A3F',
-  /** B 級 — congested. Amber / ochre. */
-  b: '#C08B3E',
+  /** A 級 — paralysed. 橘紅 orange-red. */
+  a: '#E24E1B',
+  /** B 級 — congested. 向日葵黃 sunflower yellow. */
+  b: '#E8A800',
   /** Elevated but below B threshold. */
-  watch: '#9A7B4F',
-  /** Normal / cleared. Moss. */
-  ok: '#4C8C6B',
+  watch: '#B4832E',
+  /** Normal / cleared. Teal-green, kept clear of 家長's avocado green. */
+  ok: '#2E8B6E',
 } as const;
 
-/** Cool grey-blue. Punctuation only — links, primary action, lead series. */
+/** Neutral slate-blue. Punctuation only — deliberately muted so it
+ * never competes with the two reserved role colours (school/parent). */
 export const accent = {
-  base: '#6C8CA8',
-  bright: '#86A6C2',
-  dim: '#4E6B84',
+  base: '#4E6E8C',
+  bright: '#6E93B4',
+  dim: '#3C5771',
 } as const;
 
-/** Road geometry on the map. */
+/**
+ * Road geometry on the map. Fixed dark-map-safe values, independent
+ * of `accent`/`surface` above — the map keeps its own dark theme even
+ * though the rest of the app is now rice-white.
+ */
 export const road = {
   default: '#3A3C42',
   arterial: '#4A4D55',
@@ -63,7 +74,7 @@ export const road = {
   /** Secondary diversion — thinner, dashed. */
   secondaryRoute: '#54606D',
   /** Segment under incident. */
-  blocked: '#B54A3F',
+  blocked: '#E24E1B',
 } as const;
 
 /**
@@ -71,18 +82,18 @@ export const road = {
  * Muted, distinguishable, no two adjacent hues fighting for attention.
  */
 export const series = [
-  '#86A6C2', // cool blue — lead
-  '#C08B3E', // amber
-  '#4C8C6B', // moss
+  '#4E6E8C', // slate blue — lead
+  '#2E8B6E', // teal-green
   '#9B8AA6', // dusty violet
   '#B08A6A', // clay
+  '#6E93B4', // accent bright
 ] as const;
 
 /** Shared ECharts fragments so every chart inherits the same chrome. */
 export const chart = {
   bg: 'transparent',
   axisLine: line.faint,
-  splitLine: 'rgba(255, 255, 255, 0.035)',
+  splitLine: 'rgba(42, 36, 27, 0.05)',
   axisLabel: text.muted,
   legendLabel: text.secondary,
   tooltip: {
@@ -90,10 +101,10 @@ export const chart = {
     borderColor: line.base,
     borderWidth: 1,
     textStyle: { color: text.primary, fontSize: 12 },
-    extraCssText: 'box-shadow: 0 8px 28px rgba(0,0,0,0.55); border-radius: 10px;',
+    extraCssText: 'box-shadow: 0 8px 28px rgba(42,36,27,0.18); border-radius: 10px;',
   },
   /** Marks the timeline cursor on a chart. */
-  cursorBand: 'rgba(108, 140, 168, 0.10)',
+  cursorBand: 'rgba(78, 110, 140, 0.10)',
 } as const;
 
 /**

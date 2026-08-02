@@ -9,45 +9,66 @@
    ═══════════════════════════════════════════════════════════════ */
 
 :root {
-  /* ─── Surfaces: matte black with a faint cool-grey haze ─── */
-  --surface-base:      #121214;  /* app background */
-  --surface-sunken:    #0E0E10;  /* wells, map frame, trays */
-  --surface-panel:     #1C1D21;  /* cards / panels */
-  --surface-raised:    #222328;  /* hover, nested rows */
-  --surface-input:     #191A1E;
+  /* ─── Surfaces: rice-white / cream. The map stays dark and is
+     re-pinned to the old matte values locally — see .map-frame /
+     .user-view__map overrides in App.css / UserView.css. ─── */
+  --surface-base:      #F7F2E6;  /* app background — 米白色 */
+  --surface-sunken:    #EEE6D2;  /* wells, trays */
+  --surface-panel:     #FFFDF7;  /* cards / panels */
+  --surface-raised:    #F1E9D9;  /* hover, nested rows */
+  --surface-input:     #FBF7EC;
 
   /* ─── Hairlines: layering via lightness, never colour ─── */
-  --line-faint:        #23242A;
-  --line:              #2A2B30;
-  --line-strong:       #35363D;
+  --line-faint:        #E7DEC7;
+  --line:              #D9CDAD;
+  --line-strong:       #C2B48C;
 
-  /* ─── Text ─── */
-  --text-primary:      #E8E8EA;  /* not pure white — softer contrast */
-  --text-secondary:    #9A9CA3;
-  --text-muted:        #6E7076;
-  --text-disabled:     #4E5057;
+  /* ─── Text: dark on the new light surfaces (everywhere except the
+     map, which keeps its own light-on-dark scale locally). ─── */
+  --text-primary:      #2A241B;
+  --text-secondary:    #5B5240;
+  --text-muted:        #837962;
+  --text-disabled:     #ACA189;
 
-  /* ─── Status: traffic-signal semantics, desaturated + hazed ─── */
-  --level-a:           #B54A3F;  /* A 級 — fire-hydrant red, dimmed */
-  --level-a-soft:      rgba(181, 74, 63, 0.13);
-  --level-a-line:      rgba(181, 74, 63, 0.34);
+  /* ─── Status: A/B are reserved colours — nothing else in the app
+     may reuse #E24E1B (橘紅) or #E8A800 (向日葵黃). Vivid enough to
+     read on both the light chrome and the dark map. ─── */
+  --level-a:           #E24E1B;  /* A 級 — 橘紅 orange-red */
+  --level-a-soft:      rgba(226, 78, 27, 0.13);
+  --level-a-line:      rgba(226, 78, 27, 0.38);
 
-  --level-b:           #C08B3E;  /* B 級 — amber / ochre */
-  --level-b-soft:      rgba(192, 139, 62, 0.12);
-  --level-b-line:      rgba(192, 139, 62, 0.32);
+  --level-b:           #E8A800;  /* B 級 — 向日葵黃 sunflower yellow */
+  --level-b-soft:      rgba(232, 168, 0, 0.16);
+  --level-b-line:      rgba(232, 168, 0, 0.40);
 
-  --level-ok:          #4C8C6B;  /* normal / cleared — moss */
-  --level-ok-soft:     rgba(76, 140, 107, 0.12);
-  --level-ok-line:     rgba(76, 140, 107, 0.30);
+  --level-ok:          #2E8B6E;  /* normal / cleared — teal-green, kept
+                                     clear of avocado (家長) green */
+  --level-ok-soft:     rgba(46, 139, 110, 0.12);
+  --level-ok-line:     rgba(46, 139, 110, 0.32);
 
-  /* ─── Accent: cool grey-blue. Punctuation only, never fields. ─── */
-  --accent:            #6C8CA8;
-  --accent-bright:     #86A6C2;
-  --accent-dim:        #4E6B84;
-  --accent-soft:       rgba(108, 140, 168, 0.12);
-  --accent-line:       rgba(108, 140, 168, 0.30);
+  /* ─── Role accents: reserved, one per view. 校方 sky blue /
+     家長 avocado green. Nothing else in the app may use these two
+     hues — headers apply them via --role-accent (see Header.css). ─── */
+  --role-school:       #2F8FCC;  /* 校方 — 天空藍 sky blue */
+  --role-school-soft:  rgba(47, 143, 204, 0.12);
+  --role-school-line:  rgba(47, 143, 204, 0.35);
 
-  /* ─── Map geometry ─── */
+  --role-parent:       #6E8F2E;  /* 家長 — 酪梨綠 avocado green */
+  --role-parent-soft:  rgba(110, 143, 46, 0.12);
+  --role-parent-line:  rgba(110, 143, 46, 0.35);
+
+  /* ─── Accent: neutral slate-blue. Punctuation only (links, focus
+     rings, map route line) — deliberately muted so it never reads as
+     a third role colour next to sky-blue / avocado. ─── */
+  --accent:            #4E6E8C;
+  --accent-bright:     #6E93B4;
+  --accent-dim:        #3C5771;
+  --accent-soft:       rgba(78, 110, 140, 0.12);
+  --accent-line:       rgba(78, 110, 140, 0.32);
+
+  /* ─── Map geometry — fixed, independent of the light-theme surface/
+     text tokens above. The map (tiles + all its overlays) always
+     stays dark, so these are never re-themed. ─── */
   --road-default:      #3A3C42;
   --road-arterial:     #4A4D55;
   --map-frame:         #0E0E10;
@@ -69,13 +90,14 @@
   --radius-lg:   12px;
   --radius-pill: 999px;
 
-  /* ─── Elevation: depth from black, never coloured bloom ─── */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --shadow:    0 2px 8px rgba(0, 0, 0, 0.40);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.40);
-  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.55);
-  /* 1px top highlight — reads as matte material catching light */
-  --sheen-top: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  /* ─── Elevation: soft warm-grey shadow, not coloured bloom ─── */
+  --shadow-sm: 0 1px 2px rgba(42, 36, 27, 0.10);
+  --shadow:    0 2px 8px rgba(42, 36, 27, 0.10);
+  --shadow-md: 0 2px 8px rgba(42, 36, 27, 0.10);
+  --shadow-lg: 0 8px 28px rgba(42, 36, 27, 0.16);
+  /* Was a light top-highlight for the old matte-black surfaces; on
+     paper-light panels a faint inset shade reads as depth instead. */
+  --sheen-top: inset 0 1px 0 rgba(42, 36, 27, 0.03);
 
   /* ─── Type ───
      System stack first: no render-blocking web font during a live
@@ -113,7 +135,7 @@
   --transition-normal: 200ms ease;
   --transition-slow:   380ms ease;
 
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 /* ═══════════════════════════════════════════════════════════════

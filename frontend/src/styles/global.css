@@ -38,9 +38,32 @@ body {
 }
 
 h1, h2, h3, h4 {
-  font-weight: 600;
+  font-weight: 800;
   line-height: var(--leading-tight);
   color: var(--text-primary);
+}
+h1 { font-size: var(--text-3xl); }
+h2 { font-size: var(--text-2xl); }
+h3 { font-size: var(--text-xl); }
+h4 { font-size: var(--text-lg); }
+
+/* ═══════════════════════════════════════════════════════════════
+   標題都加粗變大：面板/區塊層級的標題（不含清單裡逐項的名稱，那些
+   維持原大小以免擠壓密集列表的版面）統一放大、加粗。
+   ═══════════════════════════════════════════════════════════════ */
+.header__title,
+.chart-card__header,
+.chat__header,
+.glass-panel-header,
+.panel__header,
+.map-legend__title,
+.state__title,
+.fortune-section-title,
+.dropoff-modal__title,
+.advisory-modal__section h4,
+.rail-label {
+  font-weight: 800 !important;
+  font-size: 1.2em !important;
 }
 
 img, picture, video, canvas, svg {

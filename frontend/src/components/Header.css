@@ -10,8 +10,10 @@
   align-items: center;
   gap: var(--space-5);
   padding: 0 var(--space-4);
-  background: var(--surface-sunken);
-  border-bottom: 1px solid var(--line);
+  /* 校方=天空藍／家長=酪梨綠，由 .app / .user-view 設定這兩個變數；
+     沒有設到（理論上不會發生）就退回原本中性色。 */
+  background: var(--header-role-bg, var(--surface-sunken));
+  border-bottom: 2px solid var(--header-role-accent, var(--line));
   z-index: var(--z-header);
 }
 
@@ -52,7 +54,7 @@
   width: 22px;
   height: 22px;
   flex-shrink: 0;
-  border: 1.5px solid var(--accent);
+  border: 1.5px solid var(--header-role-accent, var(--accent));
   border-radius: 3px;
   position: relative;
 }
@@ -61,8 +63,8 @@
   content: '';
   position: absolute;
   inset: 4px;
-  border-left: 1.5px solid var(--accent-dim, var(--accent));
-  border-bottom: 1.5px solid var(--accent-dim, var(--accent));
+  border-left: 1.5px solid var(--header-role-accent, var(--accent-dim));
+  border-bottom: 1.5px solid var(--header-role-accent, var(--accent-dim));
   opacity: 0.7;
 }
 
