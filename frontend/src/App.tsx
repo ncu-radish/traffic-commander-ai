@@ -168,6 +168,7 @@ function App({ onBack }: AppProps) {
     report: advisoryReport,
     loading: advisoryLoading,
     open: advisoryModalOpen,
+    elapsedMs: advisoryElapsedMs,
     requestAdvisory,
     close: closeAdvisory,
   } = useAdvisoryReport();
@@ -180,6 +181,22 @@ function App({ onBack }: AppProps) {
     });
     requestAdvisory(incident.eventId, incident.timestamp);
   }, [requestAdvisory]);
+
+  // 自訂 JSON 注入：事件不在 live_incidents.json 中，需把原始 snake_case 資料
+  // 傳給 advisory 後端（以 event_data 而非 event_id 處理）。同時加進事件清單與
+  // active 清單，讓卡片與地圖標記一併更新。
+  const handleInjectJson = useCallback(
+    (incident: LiveIncident, raw: Record<string, unknown>) => {
+      setLiveIncidents((prev) =>
+        prev.find((i) => i.eventId === incident.eventId) ? prev : [...prev, incident]
+      );
+      setActiveIncidents((prev) =>
+        prev.find((i) => i.eventId === incident.eventId) ? prev : [...prev, incident]
+      );
+      requestAdvisory(incident.eventId, incident.timestamp, raw);
+    },
+    [requestAdvisory]
+  );
 
   // Clicking a segment on the map focuses the advisory column.
   const handleSelectSegment = useCallback((segmentId: string) => {
@@ -269,6 +286,7 @@ function App({ onBack }: AppProps) {
               incidents={liveIncidents}
               activeIncidents={activeIncidents}
               onInjectIncident={handleInjectIncident}
+              onInjectJson={handleInjectJson}
             />
           </div>
         </section>
@@ -287,6 +305,8 @@ function App({ onBack }: AppProps) {
               activeIncidents={activeIncidents}
               selectedSegmentId={focusedSegmentId}
               onSelectSegment={handleSelectSegment}
+              primaryRouteId={advisoryReport?.route_plan?.primary_route ?? null}
+              secondaryRouteIds={advisoryReport?.route_plan?.secondary_routes.map((s) => s.split(' ')[0]) ?? []}
               commuteRoutes={commuteAssessments}
               commuteOrigin={COMMUTE_ORIGIN}
               commuteDestination={COMMUTE_DESTINATION}
@@ -350,6 +370,7 @@ function App({ onBack }: AppProps) {
         open={advisoryModalOpen}
         loading={advisoryLoading}
         report={advisoryReport}
+        elapsedMs={advisoryElapsedMs}
         onClose={closeAdvisory}
       />
 

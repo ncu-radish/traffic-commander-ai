@@ -59,16 +59,41 @@ def generate_multilang_alert(
 
     # Check Article 6
     roaming_alerts = check_article_6(crowd_df, ts)
+    triggered = bool(roaming_alerts)
 
-    if not roaming_alerts:
+    from app.models.schemas import ChatRequest
+
+    # --- Not triggered: SOP Article 6 only requires a Chinese citizen SMS ---
+    if not triggered:
+        context_parts = [f"時間: {ts}"]
+        if request.context:
+            context_parts.append(f"事故背景: {request.context}")
+        context_str = "\n".join(context_parts)
+
+        llm_request = ChatRequest(
+            message=(
+                "SOP 第 6 條漫遊門檻未觸發，僅需產出中文民眾簡訊。"
+                "請根據以下資訊產出一則簡短的中文交通告警簡訊，"
+                "適合 CMS 電子看板與手機推播，內容涵蓋事故位置、改道指引與避開提醒，"
+                "避免使用專業術語，只回傳簡訊內文一行。\n\n"
+                f"{context_str}"
+            )
+        )
+        try:
+            zh = llm_service.generate_chat_response(llm_request).reply.strip()
+        except Exception:
+            zh = ""
+        if not zh:
+            zh = "【交通快訊】信義計畫區實施交通管制，請依現場號誌與改道指引行駛，並預留行車時間。"
+
         return MultiLangAlertResponse(
             triggered=False,
             trigger_stations=[],
             roaming_details={},
-            messages=None,
+            messages=MultiLangMessages(zh=zh),
         )
 
-    # Collect trigger details
+    # --- Triggered: produce ZH / EN / JA / KO ---
     trigger_stations = [a.triggered_by for a in roaming_alerts]
     roaming_details = {
         a.triggered_by: a.data_evidence.get("roaming_user_pct", 0)
@@ -92,7 +117,6 @@ def generate_multilang_alert(
     context_str = "\n".join(context_parts)
 
     # Use LLM to generate multi-language messages
-    from app.models.schemas import ChatRequest
     llm_request = ChatRequest(
         message=f"請根據以下資訊，產出符合 SOP 第 6 條的多語化告警簡訊。"
                 f"簡訊需簡短、適合 CMS 電子看板與手機推播，避免使用專業術語。"

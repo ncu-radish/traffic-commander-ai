@@ -9,6 +9,8 @@ Workflow:
 5. LLM generates natural language advisory report
 6. Return structured AdvisoryReport
 """
+from typing import Any, Dict, Optional
+
 from fastapi import APIRouter, Depends
 from app.models.schemas import (
     AdvisoryRequest,
@@ -125,13 +127,28 @@ def generate_advisory(
         step_num += 1
 
     # Step 4: ETE calculation (Article 7)
+    # Pull the affected segment's reading as of the incident time. The feed is
+    # sparse, so an exact-timestamp filter often misses; fall back to the latest
+    # reading at or before the incident time to get real saturation/speed/count
+    # figures for the classification evidence (SOP Article 1).
     avg_saturation = 0.5
+    seg_evidence: Optional[Dict[str, Any]] = None
     if affected_segment.startswith("RD_"):
         traffic_df = repository.get_traffic_flow_df()
-        ts_traffic = traffic_df[traffic_df["Timestamp"] == timestamp]
-        seg_data = ts_traffic[ts_traffic["Segment_ID"] == affected_segment]
-        if not seg_data.empty:
-            avg_saturation = float(seg_data["Saturation_Score"].mean())
+        seg_rows = traffic_df[traffic_df["Segment_ID"] == affected_segment]
+        if timestamp:
+            as_of = seg_rows[seg_rows["Timestamp"] <= timestamp]
+            seg_rows = as_of if not as_of.empty else seg_rows
+        if not seg_rows.empty:
+            row = seg_rows.sort_values("Timestamp").iloc[-1]
+            avg_saturation = float(row["Saturation_Score"])
+            seg_evidence = {
+                "road_name": row.get("Road_Name", affected_segment),
+                "saturation": avg_saturation,
+                "avg_speed": float(row.get("Avg_Speed", 0)),
+                "vehicle_count": int(row.get("Vehicle_Count", 0)),
+                "data_timestamp": row.get("Timestamp", timestamp),
+            }
 
     ete = calculate_ete(severity, avg_saturation)
     sop_articles.append("SOP 第 7 條")
@@ -163,10 +180,43 @@ def generate_advisory(
 
     # Determine alert level
     alert_level = "A" if art2 else ("B" if art5 else "normal")
-    alert_justification = (
-        f"事件 {event_id} 觸發了 {', '.join(sop_articles)}。"
-        f"嚴重程度：{severity}，影響路段：{affected_segment}。"
-    )
+
+    # Build a data-backed classification justification. SOP Article 1 grades by
+    # saturation (>= 0.95 = A, >= 0.85 = B); cite the affected segment's figures
+    # so the level is evidence-based rather than derived from event type alone.
+    justification_parts = [
+        f"事件 {event_id} 觸發了 {', '.join(sorted(set(sop_articles)))}。",
+        f"嚴重程度：{severity}，影響路段：{affected_segment}。",
+    ]
+    if seg_evidence:
+        sat = seg_evidence["saturation"]
+        if sat >= 0.95:
+            sat_band = "≥ 0.95，符合 SOP 第 1 條 A 級（癱瘓）"
+        elif sat >= 0.85:
+            sat_band = "≥ 0.85，符合 SOP 第 1 條 B 級（壅擠）"
+        else:
+            sat_band = "< 0.85，未達 SOP 第 1 條壅擠門檻"
+        justification_parts.append(
+            f"車流佐證：{seg_evidence['road_name']} 飽和度 {sat:.2f}（{sat_band}），"
+            f"車速 {seg_evidence['avg_speed']:.0f} km/h，車輛數 {seg_evidence['vehicle_count']}"
+            f"（數據時間 {seg_evidence['data_timestamp']}）。"
+        )
+        reasoning_chain.append(ReasoningStep(
+            step=step_num,
+            title="交通分級判定（數據佐證）",
+            description=(
+                f"事件依 SOP 第 2/5 條判定為 {alert_level} 級；"
+                f"並以事故路段車流數據佐證分級。"
+            ),
+            data_evidence=(
+                f"saturation={sat:.2f}, avg_speed={seg_evidence['avg_speed']:.0f}, "
+                f"vehicle_count={seg_evidence['vehicle_count']}, "
+                f"data_timestamp={seg_evidence['data_timestamp']}"
+            ),
+            sop_reference="SOP 第 1 條：車流飽和度分級門檻",
+        ))
+        step_num += 1
+    alert_justification = "".join(justification_parts)
 
     # Step 6: LLM summary generation
     llm_summary = None
