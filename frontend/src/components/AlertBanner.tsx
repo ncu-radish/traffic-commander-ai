@@ -26,13 +26,14 @@ export default function AlertBannerComponent({ alert, onDismiss, publicView }: A
   const canProduceCmsMessage = Boolean(alert.eventId);
   const { state: multilang, requestMultiLang } = useMultiLangAlert();
 
-  // 家長視角：一有可以產生公告內容的警報就直接自動產生，不用等操作者按按鈕。
+  // 一偵測到可以產生公告內容的警報就直接自動產生，兩種視角都一樣，
+  // 不需要操作者手動按按鈕才觸發。
   useEffect(() => {
-    if (publicView && canProduceCmsMessage && multilang.status === 'idle') {
+    if (canProduceCmsMessage && multilang.status === 'idle') {
       requestMultiLang(alert.eventId!, alert.timestamp);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [publicView, canProduceCmsMessage, alert.eventId, alert.timestamp]);
+  }, [canProduceCmsMessage, alert.eventId, alert.timestamp]);
 
   if (publicView && canProduceCmsMessage) {
     return (
@@ -79,14 +80,6 @@ export default function AlertBannerComponent({ alert, onDismiss, publicView }: A
         <div className="alert__title">{alert.title}</div>
         <p className="alert__message">{alert.message}</p>
 
-        {canProduceCmsMessage && multilang.status === 'idle' && (
-          <button
-            className="alert__multilang-btn"
-            onClick={() => requestMultiLang(alert.eventId!, alert.timestamp)}
-          >
-            產出民眾簡訊
-          </button>
-        )}
         {canProduceCmsMessage && multilang.status === 'loading' && (
           <p className="alert__multilang-note">產生中…</p>
         )}
