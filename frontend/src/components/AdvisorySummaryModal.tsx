@@ -1,3 +1,5 @@
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { AdvisoryReportDTO } from '../hooks/useAdvisoryReport';
 import './AdvisorySummaryModal.css';
 
@@ -57,9 +59,11 @@ export default function AdvisorySummaryModal({ open, loading, report, onClose }:
 
             <section className="advisory-modal__section">
               <h4>AI 摘要</h4>
-              <p className="advisory-modal__summary">
-                {report.llm_summary ?? report.alert_justification}
-              </p>
+              <div className="advisory-modal__summary markdown">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {report.llm_summary ?? report.alert_justification}
+                </ReactMarkdown>
+              </div>
             </section>
 
             {report.route_plan?.primary_route_name && (
