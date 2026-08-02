@@ -104,6 +104,12 @@ class AdvisoryRequest(BaseModel):
     timestamp: Optional[str] = None
 
 
+class TrendSummaryResponse(BaseModel):
+    summary: Optional[str] = None
+    traffic_facts: List[str] = []
+    crowd_facts: List[str] = []
+
+
 # --- Multi-Language Alert Models ---
 
 class MultiLangMessages(BaseModel):

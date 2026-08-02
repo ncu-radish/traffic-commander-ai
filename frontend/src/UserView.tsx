@@ -4,6 +4,7 @@ import TrafficMap from './components/TrafficMap';
 import IncidentPanel from './components/IncidentPanel';
 import TrafficChart from './components/TrafficChart';
 import CrowdChart from './components/CrowdChart';
+import TrendSummaryCard from './components/TrendSummaryCard';
 import TimelineControl from './components/TimelineControl';
 import FortuneDraw from './components/FortuneDraw';
 import AlertBannerComponent from './components/AlertBanner';
@@ -242,6 +243,8 @@ export default function UserView({ onBack }: UserViewProps) {
             activeIncidents={activeIncidents}
             onInjectIncident={handleInjectIncident}
           />
+
+          <TrendSummaryCard />
 
           {/* 與校方端同一組 .chart-card 外框與同兩個圖表元件，
               尺寸、間距、顏色、hover 與 tooltip 全部沿用，這裡只是

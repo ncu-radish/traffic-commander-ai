@@ -17,6 +17,7 @@ from app.models.schemas import (
     AdvisoryReport,
     ReasoningStep,
     ChatRequest,
+    TrendSummaryResponse,
 )
 from app.data.repository import repository
 from app.services.sop_engine import check_article_2, check_article_5
@@ -27,6 +28,93 @@ from app.services.llm.base import LLMService
 from app.api.dependencies import get_llm_service
 
 router = APIRouter(prefix="/advisory", tags=["advisory"])
+
+
+_TREND_SEGMENTS = {
+    "RD_TPE_001": "忠孝東路四段",
+    "RD_TPE_002": "光復南路",
+    "RD_TPE_003": "基隆路一段",
+    "RD_TPE_004": "市民大道四段",
+    "RD_TPE_006": "敦化南路一段",
+}
+_TREND_STATIONS = {
+    "BS_TPE_DOME": "大巨蛋",
+    "BS_MRT_BL17": "BL17 國父紀念館",
+    "BS_MRT_BL18": "BL18 市政府",
+    "BS_XY_VIESHOW": "信義威秀",
+    "BS_TPE_101": "台北101",
+}
+
+
+@router.get("/trend-summary", response_model=TrendSummaryResponse)
+def generate_trend_summary(
+    llm_service: LLMService = Depends(get_llm_service),
+):
+    """
+    車流飽和度趨勢 / 人流密度趨勢兩張圖表的 LLM 摘要。
+    事實（首尾值、峰值、是否達門檻）在這裡用 Python 算好，LLM 只負責
+    把已經算好的事實寫成一段中文摘要，避免像多語簡訊那次一樣讓 LLM
+    自己編數字。
+    """
+    traffic_facts: list[str] = []
+    traffic_df = repository.get_traffic_flow_df()
+    if not traffic_df.empty:
+        for seg_id, seg_name in _TREND_SEGMENTS.items():
+            seg_data = traffic_df[traffic_df["Segment_ID"] == seg_id].sort_values("Timestamp")
+            if seg_data.empty:
+                continue
+            first_sat = float(seg_data.iloc[0]["Saturation_Score"])
+            last_sat = float(seg_data.iloc[-1]["Saturation_Score"])
+            peak_row = seg_data.loc[seg_data["Saturation_Score"].idxmax()]
+            peak_sat = float(peak_row["Saturation_Score"])
+
+            fact = f"{seg_name}：飽和度從 {first_sat:.2f} 變化到 {last_sat:.2f}，尖峰 {peak_sat:.2f}"
+            if peak_sat >= 0.95:
+                fact += "（已達 A 級門檻）"
+            elif peak_sat >= 0.85:
+                fact += "（已達 B 級門檻）"
+            traffic_facts.append(fact)
+
+    crowd_facts: list[str] = []
+    crowd_df = repository.get_crowd_density_df()
+    if not crowd_df.empty:
+        for bs_id, st_name in _TREND_STATIONS.items():
+            st_data = crowd_df[crowd_df["BS_ID"] == bs_id].sort_values("Timestamp")
+            if st_data.empty:
+                continue
+            first_count = int(st_data.iloc[0]["User_Count"])
+            last_count = int(st_data.iloc[-1]["User_Count"])
+            peak_row = st_data.loc[st_data["User_Count"].idxmax()]
+            peak_count = int(peak_row["User_Count"])
+            crowd_facts.append(
+                f"{st_name}：人數從 {first_count:,} 變化到 {last_count:,}，尖峰 {peak_count:,} 人"
+            )
+
+    summary = None
+    if traffic_facts or crowd_facts:
+        try:
+            prompt = (
+                "請根據以下已計算好的車流與人流趨勢數據，寫一段簡潔的中文摘要"
+                "（3-4句話，正式但不要條列）。規則：只能使用下面列出的數字，"
+                "不可以自己編造或估計未列出的數字；「車流飽和度趨勢」是道路路段的"
+                "數據，「人流密度趨勢」是場站的人潮數據，兩者是各自獨立的清單，"
+                "不可以把路段誤稱為場站、或把場站誤稱為路段，也不可以推測兩者之間"
+                "有因果關係。\n\n"
+                f"車流飽和度趨勢（道路路段）：\n" + "\n".join(traffic_facts) + "\n\n"
+                f"人流密度趨勢（場站）：\n" + "\n".join(crowd_facts)
+            )
+            llm_response = llm_service.generate_chat_response(
+                ChatRequest(message=prompt)
+            )
+            summary = llm_response.reply
+        except Exception:
+            summary = None
+
+    return TrendSummaryResponse(
+        summary=summary,
+        traffic_facts=traffic_facts,
+        crowd_facts=crowd_facts,
+    )
 
 
 @router.post("/generate", response_model=AdvisoryReport)

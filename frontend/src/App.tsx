@@ -3,6 +3,7 @@ import Header from './components/Header';
 import TrafficMap from './components/TrafficMap';
 import TrafficChart from './components/TrafficChart';
 import CrowdChart from './components/CrowdChart';
+import TrendSummaryCard from './components/TrendSummaryCard';
 import IncidentPanel from './components/IncidentPanel';
 import ChatPanel from './components/ChatPanel';
 import AlertBannerComponent from './components/AlertBanner';
@@ -316,6 +317,8 @@ function App({ onBack }: AppProps) {
               onToggleCommuteRoutes={() => setShowCommuteRoutes((v) => !v)}
             />
           </div>
+
+          <TrendSummaryCard />
 
           <div className="chart-row">
             <div className="chart-card">
