@@ -139,6 +139,14 @@
   line-height: var(--leading);
 }
 
+.advisory-modal__note {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-style: italic;
+  line-height: var(--leading);
+}
+
 /* Rendered as Markdown; block elements handle their own spacing.
    Shared .markdown styles live in ChatPanel.css (bundled globally). */
 .advisory-modal__summary {

@@ -67,7 +67,8 @@ def generate_advisory(
     # Step 2: SOP article detection
     sop_articles = []
     reasoning_chain = []
-    cross_system_actions = []
+    cross_system_actions = []  # 本次事故（第2/5條）直接觸發的協調動作
+    concurrent_conditions = []  # 同一時間點另外偵測到、跟本次事故無因果關係的狀況
 
     art2 = check_article_2(incident)
     art5 = check_article_5(incident)
@@ -171,19 +172,43 @@ def generate_advisory(
     step_num += 1
 
     # Step 5: Check crowd impacts
+    # 第3/4條的觸發條件只看「當下時間點」的人流資料，跟本次事故（第2/5條，
+    # 看的是incident本身）完全是兩條獨立規則。剛好同一時間點都成立時，
+    # 不能算進 cross_system_actions（那是「本次事故要求的協調」），
+    # 只能算「同時偵測到的其他狀況」，報告要誠實區分開，不能暗示因果關係。
     crowd_df = repository.get_crowd_density_df()
     if timestamp and not crowd_df.empty:
         from app.services.sop_engine import check_article_3, check_article_4
         crowd_alerts = check_article_3(crowd_df, timestamp)
         if crowd_alerts:
             sop_articles.append("SOP 第 3 條")
-            cross_system_actions.append("通知捷運 BL17 站啟動過站不停")
-            cross_system_actions.append("通知客運業者派遣接駁巴士")
+            concurrent_conditions.append("（同時偵測，非本次事故觸發）通知捷運 BL17 站啟動過站不停")
+            concurrent_conditions.append("（同時偵測，非本次事故觸發）通知客運業者派遣接駁巴士")
+            reasoning_chain.append(ReasoningStep(
+                step=step_num,
+                title="同時偵測：SOP 第 3 條門檻（與本次事故無因果關係）",
+                description=(
+                    "此判定只看事故發生當下時間點的 BL17 站人流資料，"
+                    "跟本次事故的地點/成因無關，只是剛好同一時間點成立。"
+                ),
+                sop_reference="SOP 第 3 條：捷運與接駁分流",
+            ))
+            step_num += 1
 
         dome_alerts = check_article_4(crowd_df, timestamp)
         if dome_alerts:
             sop_articles.append("SOP 第 4 條")
-            cross_system_actions.append("大巨蛋散場機制已啟動，連結接駁分流")
+            concurrent_conditions.append("（同時偵測，非本次事故觸發）大巨蛋散場機制已啟動，連結接駁分流")
+            reasoning_chain.append(ReasoningStep(
+                step=step_num,
+                title="同時偵測：SOP 第 4 條門檻（與本次事故無因果關係）",
+                description=(
+                    "此判定只看事故發生當下時間點的大巨蛋人流資料，"
+                    "跟本次事故的地點/成因無關，只是剛好同一時間點成立。"
+                ),
+                sop_reference="SOP 第 4 條：大巨蛋散場啟動",
+            ))
+            step_num += 1
 
     # Determine alert level
     alert_level = "A" if art2 else ("B" if art5 else "normal")
@@ -235,8 +260,10 @@ def generate_advisory(
             f"警報等級：{alert_level}\n"
             f"主要疏散路線：{route_plan.primary_route_name if route_plan else '不適用'}\n"
             f"ETE 預估恢復：{ete.ete_minutes} 分鐘\n"
-            f"跨系統協調：{'; '.join(cross_system_actions) if cross_system_actions else '無'}\n\n"
-            f"請用中文撰寫，語氣正式但簡潔。"
+            f"本次事故要求之跨系統協調：{'; '.join(cross_system_actions) if cross_system_actions else '無'}\n"
+            f"同一時間點另外偵測到、與本次事故無關的狀況：{'; '.join(concurrent_conditions) if concurrent_conditions else '無'}\n\n"
+            f"請用中文撰寫，語氣正式但簡潔。若有「同一時間點另外偵測到」的狀況，"
+            f"請明確說明那是另外偵測到的，不是本次事故造成的，避免暗示因果關係。"
         )
         llm_response = llm_service.generate_chat_response(
             ChatRequest(message=summary_prompt)
@@ -254,6 +281,7 @@ def generate_advisory(
         route_plan=route_plan,
         ete=ete,
         cross_system_actions=cross_system_actions,
+        concurrent_conditions=concurrent_conditions,
         reasoning_chain=reasoning_chain,
         llm_summary=llm_summary,
     )
