@@ -18,31 +18,31 @@ interface MultiLangAlertResponseDTO {
 type MultiLangState =
   | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'ready'; messages: MultiLangMessagesDTO }
-  | { status: 'not-triggered' }
+  | { status: 'ready'; triggered: boolean; messages: MultiLangMessagesDTO }
   | { status: 'error' };
 
 /**
- * SOP第6條——後端 /api/alerts/multilang 早就能產出中英日韓四語簡訊，但一直
- * 沒有前端在呼叫。這支 hook 讓 AlertBanner 上加一個「產出多語簡訊」按鈕就能用。
+ * 事故/號誌故障（SOP第2/5條）的CMS簡訊——事故位置、改道指引、預計延誤時間、
+ * 求援或避開提醒，都是後端算好的固定內容。第6條只決定要不要多語：事故周邊
+ * 基地台有任一達Roaming門檻才會多語，否則只回傳中文，兩種情況都是真實內容。
  */
 export function useMultiLangAlert() {
   const [state, setState] = useState<MultiLangState>({ status: 'idle' });
 
-  const requestMultiLang = useCallback((timestamp?: string) => {
+  const requestMultiLang = useCallback((eventId: string, timestamp?: string) => {
     setState({ status: 'loading' });
     fetch(`${API_BASE}/alerts/multilang`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ timestamp }),
+      body: JSON.stringify({ event_id: eventId, timestamp }),
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: MultiLangAlertResponseDTO | null) => {
-        if (!data || !data.triggered || !data.messages) {
-          setState({ status: 'not-triggered' });
+        if (!data || !data.messages) {
+          setState({ status: 'error' });
           return;
         }
-        setState({ status: 'ready', messages: data.messages });
+        setState({ status: 'ready', triggered: data.triggered, messages: data.messages });
       })
       .catch(() => setState({ status: 'error' }));
   }, []);

@@ -16,7 +16,7 @@ const LANG_LABELS: Record<'zh' | 'en' | 'ja' | 'ko', string> = {
 
 export default function AlertBannerComponent({ alert, onDismiss }: AlertBannerProps) {
   const statusClass = alert.level === 'A' ? 'is-a' : 'is-b';
-  const isArticle6 = alert.sopArticle === 'SOP 第 6 條';
+  const canProduceCmsMessage = Boolean(alert.eventId);
   const { state: multilang, requestMultiLang } = useMultiLangAlert();
 
   return (
@@ -31,36 +31,38 @@ export default function AlertBannerComponent({ alert, onDismiss }: AlertBannerPr
         <div className="alert__title">{alert.title}</div>
         <p className="alert__message">{alert.message}</p>
 
-        {isArticle6 && multilang.status === 'idle' && (
+        {canProduceCmsMessage && multilang.status === 'idle' && (
           <button
             className="alert__multilang-btn"
-            onClick={() => requestMultiLang(alert.timestamp)}
+            onClick={() => requestMultiLang(alert.eventId!, alert.timestamp)}
           >
-            產出多語簡訊
+            產出民眾簡訊
           </button>
         )}
-        {isArticle6 && multilang.status === 'loading' && (
+        {canProduceCmsMessage && multilang.status === 'loading' && (
           <p className="alert__multilang-note">產生中…</p>
         )}
-        {isArticle6 && multilang.status === 'error' && (
-          <p className="alert__multilang-note">多語簡訊產生失敗，請確認 LLM 服務已啟動。</p>
+        {canProduceCmsMessage && multilang.status === 'error' && (
+          <p className="alert__multilang-note">簡訊產生失敗，請確認 LLM 服務已啟動。</p>
         )}
-        {isArticle6 && multilang.status === 'not-triggered' && (
-          <p className="alert__multilang-note">此時間點未達第 6 條門檻，無法產出簡訊。</p>
-        )}
-        {isArticle6 && multilang.status === 'ready' && (
-          <dl className="alert__multilang-list">
-            {(Object.keys(LANG_LABELS) as (keyof typeof LANG_LABELS)[]).map((lang) => {
-              const text = multilang.messages[lang];
-              if (!text) return null;
-              return (
-                <div className="alert__multilang-item" key={lang}>
-                  <dt>{LANG_LABELS[lang]}</dt>
-                  <dd>{text}</dd>
-                </div>
-              );
-            })}
-          </dl>
+        {canProduceCmsMessage && multilang.status === 'ready' && (
+          <>
+            {!multilang.triggered && (
+              <p className="alert__multilang-note">周邊未達 SOP 第 6 條漫遊門檻，僅產出中文。</p>
+            )}
+            <dl className="alert__multilang-list">
+              {(Object.keys(LANG_LABELS) as (keyof typeof LANG_LABELS)[]).map((lang) => {
+                const text = multilang.messages[lang];
+                if (!text) return null;
+                return (
+                  <div className="alert__multilang-item" key={lang}>
+                    <dt>{LANG_LABELS[lang]}</dt>
+                    <dd>{text}</dd>
+                  </div>
+                );
+              })}
+            </dl>
+          </>
         )}
       </div>
 

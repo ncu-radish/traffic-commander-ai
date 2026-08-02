@@ -20,6 +20,8 @@ interface AlertCheckResponseDTO {
   roaming_alerts: SOPAlertDTO[];
 }
 
+const INCIDENT_ARTICLES = new Set(['SOP 第 2 條', 'SOP 第 5 條']);
+
 function toBanner(a: SOPAlertDTO, timestamp: string): AlertBanner {
   return {
     id: `${a.article}-${a.triggered_by}-${timestamp}`,
@@ -29,6 +31,9 @@ function toBanner(a: SOPAlertDTO, timestamp: string): AlertBanner {
     timestamp,
     sopArticle: a.article,
     dismissed: false,
+    // 只有事故/號誌故障（第2/5條）的 triggered_by 才是事件 event_id，
+    // 其餘條文的 triggered_by 是路段/基地台 id，不能拿來當事件用。
+    eventId: INCIDENT_ARTICLES.has(a.article) ? a.triggered_by : undefined,
   };
 }
 

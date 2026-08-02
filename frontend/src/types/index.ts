@@ -103,6 +103,8 @@ export interface AlertBanner {
   timestamp: string;
   sopArticle?: string;
   dismissed: boolean;
+  /** 事故/號誌故障類警報（SOP第2/5條）觸發它的 event_id，用來產出該事故的多語簡訊。 */
+  eventId?: string;
 }
 
 export interface AccidentHotspotSegment {
