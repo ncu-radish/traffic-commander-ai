@@ -9,6 +9,7 @@ Workflow:
 5. LLM generates natural language advisory report
 6. Return structured AdvisoryReport
 """
+import re
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends
@@ -17,6 +18,7 @@ from app.models.schemas import (
     AdvisoryReport,
     ReasoningStep,
     ChatRequest,
+    TrendSummaryResponse,
 )
 from app.data.repository import repository
 from app.services.sop_engine import check_article_2, check_article_5
@@ -27,6 +29,127 @@ from app.services.llm.base import LLMService
 from app.api.dependencies import get_llm_service
 
 router = APIRouter(prefix="/advisory", tags=["advisory"])
+
+
+_TREND_SEGMENTS = {
+    "RD_TPE_001": "忠孝東路四段",
+    "RD_TPE_002": "光復南路",
+    "RD_TPE_003": "基隆路一段",
+    "RD_TPE_004": "市民大道四段",
+    "RD_TPE_006": "敦化南路一段",
+}
+_TREND_STATIONS = {
+    "BS_TPE_DOME": "大巨蛋",
+    "BS_MRT_BL17": "BL17 國父紀念館",
+    "BS_MRT_BL18": "BL18 市政府",
+    "BS_XY_VIESHOW": "信義威秀",
+    "BS_TPE_101": "台北101",
+}
+
+
+@router.get("/trend-summary", response_model=TrendSummaryResponse)
+def generate_trend_summary(
+    timestamp: Optional[str] = None,
+    llm_service: LLMService = Depends(get_llm_service),
+):
+    """
+    車流飽和度趨勢 / 人流密度趨勢兩張圖表的 LLM 摘要。
+    讀的是「timestamp 當下」的 as-of snapshot（不是整段時間的首尾/尖峰），
+    所以時間軸移動到哪，摘要就反映當下哪裡壅塞——不是固定不變的總覽。
+    事實（各路段/場站當下數值、是否達門檻）在這裡用 Python 算好，LLM 只
+    負責把已經算好的事實寫成一句話，避免像多語簡訊那次一樣讓 LLM 自己編數字。
+    """
+    traffic_facts: list[str] = []
+    traffic_df = repository.get_traffic_flow_df()
+    if not traffic_df.empty:
+        ts_traffic = snapshot_at(traffic_df, timestamp) if timestamp else traffic_df
+        for seg_id, seg_name in _TREND_SEGMENTS.items():
+            row = ts_traffic[ts_traffic["Segment_ID"] == seg_id]
+            if row.empty:
+                continue
+            sat = float(row.iloc[-1]["Saturation_Score"])
+            fact = f"{seg_name}：目前飽和度 {sat:.2f}"
+            if sat >= 0.95:
+                fact += "（已達 A 級門檻）"
+            elif sat >= 0.85:
+                fact += "（已達 B 級門檻）"
+            traffic_facts.append(fact)
+
+    crowd_facts: list[str] = []
+    crowd_df = repository.get_crowd_density_df()
+    if not crowd_df.empty:
+        ts_crowd = snapshot_at(crowd_df, timestamp, id_col="BS_ID") if timestamp else crowd_df
+        for bs_id, st_name in _TREND_STATIONS.items():
+            row = ts_crowd[ts_crowd["BS_ID"] == bs_id]
+            if row.empty:
+                continue
+            count = int(row.iloc[-1]["User_Count"])
+            crowd_facts.append(f"{st_name}：目前人數 {count:,} 人")
+
+    # 本地小模型即使給了完整清單也常常把路段跟場站搞混、加因果臆測、或
+    # 自己加標題。縮小輸入只給「最極端的一條路段+一個場站」與門檻計數，
+    # 大幅降低模型能自由發揮、產生混淆內容的空間。
+    summary = None
+    peak_seg_fact = max(
+        traffic_facts,
+        key=lambda f: float(f.split("目前飽和度 ")[1][:4]),
+        default=None,
+    )
+    peak_station_fact = max(
+        crowd_facts,
+        key=lambda f: int(f.split("目前人數 ")[1].split(" 人")[0].replace(",", "")),
+        default=None,
+    )
+    congested_count = sum(1 for f in traffic_facts if "已達" in f)
+
+    if peak_seg_fact or peak_station_fact:
+        lines = []
+        if peak_seg_fact:
+            lines.append(f"目前車流飽和度最高的路段：{peak_seg_fact}")
+        if congested_count:
+            lines.append(f"目前共有 {congested_count} 條路段達到壅擠門檻")
+        if peak_station_fact:
+            lines.append(f"目前人流密度最高的場站：{peak_station_fact}")
+
+        # 這顆本地小模型測下來即使給了明確指示，還是偶爾會編出清單裡沒有的
+        # 數字（例如自己加一個「500多輛」、把場站說成別的名字）。與其只靠
+        # prompt教它，這裡直接驗證：LLM輸出裡出現的每一個數字都必須能在
+        # 給它的事實清單裡找到，抓到不在清單裡的數字就整句丟掉、改用
+        # 事實清單直接拼成的保底句子，確保顯示的內容一定跟真實數據一致。
+        fallback_summary = "；".join(lines) + "。"
+        allowed_numbers = set(re.findall(r"\d+(?:\.\d+)?", "\n".join(lines).replace(",", "")))
+
+        summary = fallback_summary
+        try:
+            prompt = (
+                "請把以下已經算好的數據寫成一句話中文摘要（不超過50字，"
+                "純文字、不要標題、不要條列、不要markdown符號、全部使用"
+                "繁體中文、不可以夾雜任何英文單字）。"
+                "只能使用下面列出的數字，不可以自己編造數字，也不可以推測"
+                "路段與場站之間有因果關係。\n\n" + "\n".join(lines)
+            )
+            llm_response = llm_service.generate_chat_response(
+                ChatRequest(message=prompt)
+            )
+            # 安全網：即使叮嚀了還是可能夾雜markdown標題或條列符號，這裡濾掉。
+            raw_lines = [
+                ln.strip().lstrip("#-*• ")
+                for ln in llm_response.reply.splitlines()
+                if ln.strip() and not ln.strip().startswith("#")
+            ]
+            llm_summary = " ".join(raw_lines) if raw_lines else None
+            if llm_summary:
+                reply_numbers = set(re.findall(r"\d+(?:\.\d+)?", llm_summary.replace(",", "")))
+                if reply_numbers.issubset(allowed_numbers):
+                    summary = llm_summary
+        except Exception:
+            pass
+
+    return TrendSummaryResponse(
+        summary=summary,
+        traffic_facts=traffic_facts,
+        crowd_facts=crowd_facts,
+    )
 
 
 @router.post("/generate", response_model=AdvisoryReport)
