@@ -3,10 +3,12 @@ import './TrendSummaryCard.css';
 
 interface TrendSummaryCardProps {
   currentTimestamp: string;
+  /** 家長端：不顯示給交控中心/警力看的內部調度建議措施。 */
+  publicView?: boolean;
 }
 
-export default function TrendSummaryCard({ currentTimestamp }: TrendSummaryCardProps) {
-  const state = useTrendSummary(currentTimestamp);
+export default function TrendSummaryCard({ currentTimestamp, publicView }: TrendSummaryCardProps) {
+  const state = useTrendSummary(currentTimestamp, publicView);
 
   return (
     <div className="chart-card trend-summary-card">

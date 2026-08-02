@@ -50,6 +50,7 @@ _TREND_STATIONS = {
 @router.get("/trend-summary", response_model=TrendSummaryResponse)
 def generate_trend_summary(
     timestamp: Optional[str] = None,
+    public: bool = False,
     llm_service: LLMService = Depends(get_llm_service),
 ):
     """
@@ -58,6 +59,9 @@ def generate_trend_summary(
     所以時間軸移動到哪，摘要就反映當下哪裡壅塞——不是固定不變的總覽。
     事實（各路段/場站當下數值、是否達門檻）在這裡用 Python 算好，LLM 只
     負責把已經算好的事實寫成一句話，避免像多語簡訊那次一樣讓 LLM 自己編數字。
+
+    public=True（家長端）時不附「建議措施」——那是給交控中心/警力的內部
+    調度指示，家長只需要知道哪裡壅塞，不需要知道警察要幹嘛。
     """
     traffic_facts: list[str] = []
     traffic_df = repository.get_traffic_flow_df()
@@ -106,7 +110,7 @@ def generate_trend_summary(
     # （app/services/sop_engine.py check_article_1），跟事故建議書用的是
     # 同一套文字，確保「趨勢摘要」講的因應措施跟系統其他地方一致。
     action_fact = None
-    if peak_seg_fact:
+    if peak_seg_fact and not public:
         peak_sat_value = float(peak_seg_fact.split("目前飽和度 ")[1][:4])
         if peak_sat_value >= 0.95:
             action_fact = "建議措施：啟動替代路徑引導（SOP第2條）、延長綠燈時相25%、派遣交通警察至關鍵路口"
