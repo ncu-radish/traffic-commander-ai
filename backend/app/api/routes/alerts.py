@@ -1,7 +1,7 @@
 """
 Alerts API routes — SOP threshold checking and multi-language alert generation.
 """
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from typing import Optional
 from app.models.schemas import (
     AlertCheckResponse,
@@ -14,8 +14,6 @@ from app.services.sop_engine import check_all_sop_thresholds, check_article_2, c
 from app.services.route_planner import plan_routes
 from app.services.ete_calculator import calculate_ete
 from app.services.traffic_snapshot import snapshot_at
-from app.services.llm.base import LLMService
-from app.api.dependencies import get_llm_service
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
@@ -43,17 +41,19 @@ def check_sop_thresholds(timestamp: str, active_incident_ids: Optional[str] = No
 
 
 @router.post("/multilang", response_model=MultiLangAlertResponse)
-def generate_multilang_alert(
-    request: MultiLangAlertRequest,
-    llm_service: LLMService = Depends(get_llm_service),
-):
+def generate_multilang_alert(request: MultiLangAlertRequest):
     """
     Public CMS/SMS message. 第 6 條只負責「觸發判定」：Roaming >= 30% 才需要
-    多語（LLM 只翻譯固定文字，不新增資訊），未觸發時只有中文。訊息本身要嘛是
-    某個事故的內容（SOP第2條b項格式：事故位置/改道指引/預計延誤時間/求援提醒），
-    要嘛——沒有對應事故時（例如單純人潮聚集）——是同樣四要點改寫成的人潮疏導
-    通知（現場位置/疏導動向/人潮狀況/求援提醒）。id 可以是事件 event_id
-    （SOP2/5的事故）或基地台 BS_ID（SOP6單獨觸發、沒有對應事故時）。
+    多語，未觸發時只有中文。訊息本身要嘛是某個事故的內容（SOP第2條b項格式：
+    事故位置/改道指引/預計延誤時間/求援提醒），要嘛——沒有對應事故時（例如
+    單純人潮聚集）——是同樣四要點改寫成的人潮疏導通知。id 可以是事件
+    event_id（SOP2/5的事故）或基地台 BS_ID（SOP6單獨觸發、沒有對應事故時）。
+
+    四語版本全部是Python字串樣板直接產生，刻意不經過LLM翻譯：這是公共安全
+    通報，人數/百分比/延誤分鐘數必須跟中文原文完全一致。實測發現本機小型
+    LLM（llama3.2:1b）翻譯時會把「16,000人」翻成「8万人」這種捏造數字的
+    錯誤，對公共安全簡訊而言不可接受，所以四語都是同一組真實數字直接套版，
+    不會有翻譯出錯的風險。
     """
     if not request.event_id:
         return MultiLangAlertResponse(triggered=False, trigger_stations=[], roaming_details={}, messages=None)
@@ -62,16 +62,16 @@ def generate_multilang_alert(
     incident = next((i for i in incidents_raw if i.get("event_id") == request.event_id), None)
 
     if incident:
-        result = _build_incident_message(incident, request.timestamp)
+        result = _build_incident_messages(incident, request.timestamp)
     elif request.event_id.startswith("BS_"):
-        result = _build_crowd_message(request.event_id, request.timestamp)
+        result = _build_crowd_messages(request.event_id, request.timestamp)
     else:
         return MultiLangAlertResponse(triggered=False, trigger_stations=[], roaming_details={}, messages=None)
 
     if result is None:
         return MultiLangAlertResponse(triggered=False, trigger_stations=[], roaming_details={}, messages=None)
 
-    zh_message, trigger_stations, roaming_details = result
+    messages, trigger_stations, roaming_details = result
 
     if not trigger_stations:
         # 未觸發僅中文——中文簡訊仍然是真實內容，不是佔位訊息。
@@ -79,20 +79,18 @@ def generate_multilang_alert(
             triggered=False,
             trigger_stations=[],
             roaming_details={},
-            messages=MultiLangMessages(zh=zh_message, en="", ja=None, ko=None),
+            messages=MultiLangMessages(zh=messages["zh"], en="", ja=None, ko=None),
         )
-
-    en, ja, ko = _translate_cms_message(llm_service, zh_message)
 
     return MultiLangAlertResponse(
         triggered=True,
         trigger_stations=trigger_stations,
         roaming_details=roaming_details,
-        messages=MultiLangMessages(zh=zh_message, en=en, ja=ja, ko=ko),
+        messages=MultiLangMessages(**messages),
     )
 
 
-def _build_incident_message(incident: dict, requested_ts: Optional[str]):
+def _build_incident_messages(incident: dict, requested_ts: Optional[str]):
     """
     事故類型決定訊息格式，不是每種事件都適用「改道」：
     - SOP第2條（道路封閉）：事故位置、改道指引、預計延誤時間、求援提醒。
@@ -111,12 +109,29 @@ def _build_incident_message(incident: dict, requested_ts: Optional[str]):
         # SOP第5條的CMS格式是「<路段>號誌故障」，用路段名稱而非事故位置
         # 自由文字——location本身可能已經包含「號誌故障」字樣，兩個接在一起會重複。
         road_name = seg_info_5.get("name") if seg_info_5 else location
-        zh_message = (
-            f"【號誌故障通報】{road_name}號誌故障，請依現場指揮通行，"
-            f"行經時請放慢車速並保持耐心；如遇緊急狀況請撥打 110 或 119 求援。"
-        )
+        messages = {
+            "zh": (
+                f"【號誌故障通報】{road_name}號誌故障，請依現場指揮通行，"
+                f"行經時請放慢車速並保持耐心；如遇緊急狀況請撥打 110 或 119 求援。"
+            ),
+            "en": (
+                f"[Signal Failure Notice] Traffic signal malfunction at {road_name}. "
+                f"Please follow on-site traffic control, slow down, and stay patient. "
+                f"For emergencies, call 110 or 119."
+            ),
+            "ja": (
+                f"【信号機故障のお知らせ】{road_name}の信号機が故障しています。"
+                f"現場の交通整理員の指示に従い、徐行してください。"
+                f"緊急時は110または119へご連絡ください。"
+            ),
+            "ko": (
+                f"[신호 고장 안내] {road_name} 구간의 신호등이 고장났습니다. "
+                f"현장 교통 통제에 따라 서행하며 통행해 주시기 바랍니다. "
+                f"긴급 상황 시 110 또는 119로 연락하세요."
+            ),
+        }
         nearby_station_ids = seg_info_5.get("nearby_stations", []) if seg_info_5 else []
-        return zh_message, *_check_article6_trigger(nearby_station_ids, ts)
+        return messages, *_check_article6_trigger(nearby_station_ids, ts)
 
     severity = incident.get("severity", "Medium")
 
@@ -129,10 +144,21 @@ def _build_incident_message(incident: dict, requested_ts: Optional[str]):
         affected_segment, road_network, traffic_records,
         incident_location=incident.get("location"),
     )
-    detour_clause = (
-        f"請改道{plan.primary_route_name}" if plan.primary_route_name
-        else "尚無符合條件之替代路線，請依現場指揮通行"
-    )
+
+    if plan.primary_route_name:
+        detour = {
+            "zh": f"請改道{plan.primary_route_name}",
+            "en": f"please detour via {plan.primary_route_name}",
+            "ja": f"{plan.primary_route_name}へ迂回してください",
+            "ko": f"{plan.primary_route_name}(으)로 우회해 주시기 바랍니다",
+        }
+    else:
+        detour = {
+            "zh": "尚無符合條件之替代路線，請依現場指揮通行",
+            "en": "no qualifying alternate route is currently available; please follow on-site traffic control",
+            "ja": "現時点で適切な迂回路がありません。現場の指示に従ってください",
+            "ko": "현재 적합한 우회로가 없습니다. 현장 지시에 따라 통행해 주세요",
+        }
 
     seg_data = (
         ts_traffic[ts_traffic["Segment_ID"] == affected_segment]
@@ -140,19 +166,37 @@ def _build_incident_message(incident: dict, requested_ts: Optional[str]):
     )
     avg_saturation = float(seg_data["Saturation_Score"].mean()) if not seg_data.empty else 0.5
     ete = calculate_ete(severity, avg_saturation)
+    ete_min = f"{ete.ete_minutes:.0f}"
 
-    zh_message = (
-        f"【交通事故通報】{location}封閉，{detour_clause}，"
-        f"預計延誤 {ete.ete_minutes:.0f} 分鐘。請提前避開該路段；"
-        f"如遇緊急狀況請撥打 110 或 119 求援。"
-    )
+    messages = {
+        "zh": (
+            f"【交通事故通報】{location}封閉，{detour['zh']}，"
+            f"預計延誤 {ete_min} 分鐘。請提前避開該路段；"
+            f"如遇緊急狀況請撥打 110 或 119 求援。"
+        ),
+        "en": (
+            f"[Traffic Accident Notice] {location} is closed; {detour['en']}. "
+            f"Estimated delay: {ete_min} minutes. Please avoid this area in advance. "
+            f"For emergencies, call 110 or 119."
+        ),
+        "ja": (
+            f"【交通事故のお知らせ】{location}が閉鎖されています。{detour['ja']}。"
+            f"予想遅延時間：{ete_min}分。事前の迂回をお勧めします。"
+            f"緊急時は110または119へご連絡ください。"
+        ),
+        "ko": (
+            f"[교통사고 안내] {location} 구간이 폐쇄되었습니다. {detour['ko']}. "
+            f"예상 지연 시간: {ete_min}분. 사전에 우회하시기 바랍니다. "
+            f"긴급 상황 시 110 또는 119로 연락하세요."
+        ),
+    }
 
     # 觸發判定：事故路段周邊基地台（nearby_stations）是否有任一達 SOP 第 6 條門檻。
     seg_info = next((s for s in road_network if s.get("segment_id") == affected_segment), None)
     nearby_station_ids = seg_info.get("nearby_stations", []) if seg_info else []
 
     trigger_stations, roaming_details = _check_article6_trigger(nearby_station_ids, ts)
-    return zh_message, trigger_stations, roaming_details
+    return messages, trigger_stations, roaming_details
 
 
 def _check_article6_trigger(nearby_station_ids: list, ts: str):
@@ -173,7 +217,7 @@ def _check_article6_trigger(nearby_station_ids: list, ts: str):
     return trigger_stations, roaming_details
 
 
-def _build_crowd_message(station_id: str, requested_ts: Optional[str]):
+def _build_crowd_messages(station_id: str, requested_ts: Optional[str]):
     """
     沒有對應事故的單純人潮聚集（SOP6自己觸發）。訊息要點改寫成人潮疏導版本：
     現場位置、疏導動向、人潮/漫遊狀況、求援提醒——跟事故版本同一套四要點，
@@ -193,46 +237,37 @@ def _build_crowd_message(station_id: str, requested_ts: Optional[str]):
     roaming = float(row["Roaming_User_Pct"])
     location_name = row["Location_Name"]
     user_count = int(row["User_Count"])
+    pct = f"{roaming * 100:.0f}"
 
-    zh_message = (
-        f"【人潮疏導通知】{location_name}目前人數 {user_count:,}，"
-        f"境外/外地旅客比例達 {roaming*100:.0f}%，請配合現場疏導動線通行，"
-        f"避免長時間停留；如需協助請洽現場工作人員或撥打 1999 市民熱線。"
-    )
+    messages = {
+        "zh": (
+            f"【人潮疏導通知】{location_name}目前人數 {user_count:,}，"
+            f"境外/外地旅客比例達 {pct}%，請配合現場疏導動線通行，"
+            f"避免長時間停留；如需協助請洽現場工作人員或撥打 1999 市民熱線。"
+        ),
+        "en": (
+            f"[Crowd Advisory] {location_name} currently has {user_count:,} people, "
+            f"with {pct}% being international/out-of-town visitors. "
+            f"Please follow on-site crowd guidance and avoid prolonged stays. "
+            f"For assistance, contact on-site staff or call the 1999 Citizen Hotline."
+        ),
+        "ja": (
+            f"【人混みのお知らせ】{location_name}には現在{user_count:,}人がおり、"
+            f"そのうち{pct}%が海外・遠方からの旅行者です。"
+            f"現場の誘導に従い、長時間の滞在は避けてください。"
+            f"サポートが必要な場合は現場スタッフにご連絡いただくか、"
+            f"1999市民ホットラインへお電話ください。"
+        ),
+        "ko": (
+            f"[인파 안내] {location_name}에는 현재 {user_count:,}명이 있으며, "
+            f"이 중 {pct}%가 해외/타지역 방문객입니다. "
+            f"현장 안내에 따라 장시간 체류를 피해 주시기 바랍니다. "
+            f"도움이 필요하시면 현장 직원에게 문의하시거나 "
+            f"1999 시민 핫라인으로 연락해 주세요."
+        ),
+    }
 
     if roaming < 0.30:
-        return zh_message, [], {}
+        return messages, [], {}
 
-    return zh_message, [station_id], {station_id: roaming}
-
-
-def _translate_cms_message(llm_service: LLMService, zh_message: str):
-    from app.models.schemas import ChatRequest
-    llm_request = ChatRequest(
-        message=(
-            "請將以下交通/人潮CMS看板簡訊，忠實翻譯成英文、日文、韓文，"
-            "不要新增原文沒有的資訊、不要省略任何一個要點。"
-            "風格需簡短，適合電子看板與手機簡訊顯示，避免專業術語。\n\n"
-            f"原文（中文）：{zh_message}\n\n"
-            "請用 [EN]、[JA]、[KO] 標記分別輸出三個語言版本，每種語言各一段，不要輸出其他內容。"
-        )
-    )
-    llm_response = llm_service.generate_chat_response(llm_request)
-    en = _extract_lang(llm_response.reply, "[EN]", "[JA]") or "Traffic alert: please refer to the Chinese notice for details."
-    ja = _extract_lang(llm_response.reply, "[JA]", "[KO]")
-    ko = _extract_lang(llm_response.reply, "[KO]", None)
-    return en, ja, ko
-
-
-def _extract_lang(text: str, start_tag: str, end_tag: Optional[str]) -> Optional[str]:
-    """Extract text between language tags."""
-    start_idx = text.find(start_tag)
-    if start_idx == -1:
-        return None
-    start_idx += len(start_tag)
-    if end_tag:
-        end_idx = text.find(end_tag, start_idx)
-        if end_idx == -1:
-            return text[start_idx:].strip()
-        return text[start_idx:end_idx].strip()
-    return text[start_idx:].strip()
+    return messages, [station_id], {station_id: roaming}
