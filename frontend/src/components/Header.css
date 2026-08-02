@@ -11,9 +11,11 @@
   gap: var(--space-5);
   padding: 0 var(--space-4);
   /* 校方=天空藍／家長=酪梨綠，由 .app / .user-view 設定這兩個變數；
-     沒有設到（理論上不會發生）就退回原本中性色。 */
+     沒有設到（理論上不會發生）就退回原本中性色。底部一條淡淡的發光
+     邊線，讀起來像儀表板的通電指示，而不是純平面色塊。 */
   background: var(--header-role-bg, var(--surface-sunken));
   border-bottom: 2px solid var(--header-role-accent, var(--line));
+  box-shadow: 0 1px 12px -4px var(--header-role-accent, transparent);
   z-index: var(--z-header);
 }
 

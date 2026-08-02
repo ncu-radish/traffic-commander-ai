@@ -23,7 +23,13 @@ body {
   font-size: var(--text-base);
   line-height: var(--leading);
   color: var(--text-primary);
-  background: var(--surface-base);
+  background-color: var(--surface-base);
+  /* 科技質感：極淡的細格線紋理，像儀表板底板而不是一片素色紙。
+     線本身幾乎看不見（3%不透明度），只在大面積時隱約可辨。 */
+  background-image:
+    linear-gradient(var(--line-faint) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-faint) 1px, transparent 1px);
+  background-size: 28px 28px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
