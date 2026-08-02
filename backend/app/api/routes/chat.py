@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends
 from app.models.schemas import ChatRequest, ChatResponse
 from app.services.llm.base import LLMService
 from app.api.dependencies import get_llm_service
+from app.services.traffic_snapshot import snapshot_at
+from app.services.ete_calculator import calculate_ete
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -73,23 +75,6 @@ def _extract_timestamp_from_message(message: str, available_timestamps: list) ->
     return None
 
 
-def _snapshot_at(df, ts: str, id_col: str = "Segment_ID"):
-    """
-    Latest reading per entity (segment or station) at or before `ts`.
-
-    The data feeds are sparse — most timestamps report only a handful of
-    entities — so filtering on an exact timestamp would leave the rest looking
-    unreported. Timestamps use a zero-padded "YYYY-MM-DD HH:MM" format, so
-    plain string comparison orders them correctly.
-    """
-    if df.empty or ts is None:
-        return df
-    subset = df[df["Timestamp"] <= ts]
-    if subset.empty:
-        return subset
-    return subset.sort_values("Timestamp").groupby(id_col, as_index=False).tail(1)
-
-
 def _build_route_plan_context(
     message: str,
     road_network: list,
@@ -110,7 +95,7 @@ def _build_route_plan_context(
 
     # Which segments need a plan: incidents that meet SOP Article 2, plus any
     # road segment the operator named in the question.
-    targets: dict = {}  # segment_id -> incident location (or None)
+    targets: dict = {}  # segment_id -> (incident location, severity), severity None if not from an incident
 
     for inc in incidents or []:
         seg_id = inc.get("affected_segment", "")
@@ -119,12 +104,12 @@ def _build_route_plan_context(
         if inc.get("status") in {"Closed", "Blocked", "Restricted"} and inc.get(
             "severity"
         ) in {"High", "Critical"}:
-            targets[seg_id] = inc.get("location")
+            targets[seg_id] = (inc.get("location"), inc.get("severity"))
 
     for seg in road_network:
         if seg["name"] in message or seg["segment_id"] in message:
             if seg.get("alternatives"):
-                targets.setdefault(seg["segment_id"], None)
+                targets.setdefault(seg["segment_id"], (None, None))
 
     if not targets:
         return ""
@@ -136,7 +121,7 @@ def _build_route_plan_context(
     # an exact-timestamp filter would leave most of them missing and the
     # "lowest saturation wins" tie-break would fall back to a default.
     traffic_records = (
-        _snapshot_at(traffic_df, use_ts).to_dict("records")
+        snapshot_at(traffic_df, use_ts).to_dict("records")
         if use_ts is not None and not traffic_df.empty
         else []
     )
@@ -146,7 +131,7 @@ def _build_route_plan_context(
     }
 
     blocks = []
-    for seg_id, location in targets.items():
+    for seg_id, (location, severity) in targets.items():
         plan = plan_routes(
             seg_id,
             road_network,
@@ -161,6 +146,17 @@ def _build_route_plan_context(
         ]
         if location:
             lines.append(f"  事故位置：{location}")
+
+        # SOP第7條：只有真的是事故觸發（有severity）才算ETE，單純被使用者
+        # 問到名字的路段沒有「事故」可言，算ETE沒有意義。
+        if severity:
+            seg_sat = sat_lookup.get(seg_id, 0.5)
+            ete = calculate_ete(severity, seg_sat)
+            lines.append(
+                f"  預估恢復時間（ETE，依 SOP 第 7 條）：{ete.ete_minutes} 分鐘"
+                f"（基礎清除 {ete.base_clearance} + 壅擠懲罰 {ete.congestion_penalty}，"
+                f"依 severity={severity}、事故路段飽和度={seg_sat:.2f} 計算）"
+            )
 
         if plan.primary_route:
             primary_sat = sat_lookup.get(plan.primary_route)
@@ -226,7 +222,7 @@ def _build_realtime_context(message: str) -> str:
             # segments. Reading a single timestamp would report most of the
             # network as missing, so take each segment's latest reading at or
             # before the reference time instead.
-            snapshot = _snapshot_at(traffic_df, resolved_ts)
+            snapshot = snapshot_at(traffic_df, resolved_ts)
             label = "車流狀態" if target_ts else "即時車流狀態"
 
             high_sat = snapshot[snapshot["Saturation_Score"] >= 0.80].sort_values(
@@ -256,7 +252,7 @@ def _build_realtime_context(message: str) -> str:
         if not crowd_df.empty:
             # Use the same reference time as traffic for consistency.
             # Apply snapshot logic so all stations have a reading.
-            crowd_snapshot = _snapshot_at(crowd_df, resolved_ts, id_col="BS_ID")
+            crowd_snapshot = snapshot_at(crowd_df, resolved_ts, id_col="BS_ID")
 
             if not crowd_snapshot.empty:
                 notable = crowd_snapshot[
@@ -355,7 +351,7 @@ def _build_realtime_context(message: str) -> str:
             # Add saturation data for alternative segments (for route planning)
             if relevant_ids and not traffic_df.empty:
                 use_ts = resolved_ts if resolved_ts else traffic_df["Timestamp"].max()
-                alt_snapshot = _snapshot_at(traffic_df, use_ts)
+                alt_snapshot = snapshot_at(traffic_df, use_ts)
                 alt_traffic = alt_snapshot[alt_snapshot["Segment_ID"].isin(relevant_ids)]
                 if not alt_traffic.empty:
                     lines = [f"[替代路段飽和度 - 基準 {use_ts}]"]
